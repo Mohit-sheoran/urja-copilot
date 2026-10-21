@@ -70,7 +70,7 @@ st.markdown(
 :root{--primary:#059669;--primary-dark:#047857;--accent:#F59E0B;--card:#FFFFFF;--text:#0F172A;--muted:#64748B;--border:#E2E8F0;--radius:14px;--shadow:0 4px 20px rgba(15,23,42,.06);}
 .stApp{background:linear-gradient(180deg,#F8FAFC 0%,#EFF6FF 100%);color:var(--text);font-family:'Inter','Noto Sans Devanagari',sans-serif;}
 .block-container{padding-top:4rem;max-width:1250px;}
-#MainMenu,footer{visibility:hidden;}
+footer{visibility:hidden;}
 [data-testid="stDecoration"]{display:none;}
 header[data-testid="stHeader"]{background:transparent;}
 section[data-testid="stSidebar"]{background:#FFFFFF;border-right:1px solid var(--border);}
