@@ -69,7 +69,7 @@ st.markdown(
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;700&display=swap');
 :root{--primary:#059669;--primary-dark:#047857;--accent:#F59E0B;--card:#FFFFFF;--text:#0F172A;--muted:#64748B;--border:#E2E8F0;--radius:14px;--shadow:0 4px 20px rgba(15,23,42,.06);}
 .stApp{background:linear-gradient(180deg,#F8FAFC 0%,#EFF6FF 100%);color:var(--text);font-family:'Inter','Noto Sans Devanagari',sans-serif;}
-.block-container{padding-top:1.2rem;max-width:1250px;}
+.block-container{padding-top:4rem;max-width:1250px;}
 #MainMenu,footer{visibility:hidden;}
 [data-testid="stToolbar"],[data-testid="stDecoration"]{display:none;}
 header[data-testid="stHeader"]{background:transparent;}
