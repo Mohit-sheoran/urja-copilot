@@ -71,7 +71,7 @@ st.markdown(
 .stApp{background:linear-gradient(180deg,#F8FAFC 0%,#EFF6FF 100%);color:var(--text);font-family:'Inter','Noto Sans Devanagari',sans-serif;}
 .block-container{padding-top:4rem;max-width:1250px;}
 #MainMenu,footer{visibility:hidden;}
-[data-testid="stToolbar"],[data-testid="stDecoration"]{display:none;}
+[data-testid="stDecoration"]{display:none;}
 header[data-testid="stHeader"]{background:transparent;}
 section[data-testid="stSidebar"]{background:#FFFFFF;border-right:1px solid var(--border);}
 .hero-container{background:linear-gradient(135deg,#0F172A 0%,#1E3A8A 65%,#047857 100%);padding:30px 34px;border-radius:var(--radius);color:#fff;margin-bottom:22px;box-shadow:0 15px 35px -10px rgba(15,23,42,.4);border:1px solid rgba(255,255,255,.15);}
