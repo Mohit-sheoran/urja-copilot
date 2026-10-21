@@ -142,7 +142,7 @@ for _k, _v in {
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
-_, col_lang = st.columns([4, 1])
+_, col_lang = st.columns([2, 1])
 with col_lang:
     lang = st.selectbox(
         "Language", ["English", "हिंदी (Hindi)"], label_visibility="collapsed"
