@@ -671,15 +671,15 @@ with tab_report:
                 img_key = hashlib.md5(uploaded_file.getvalue()).hexdigest() if uploaded_file else ""
                 img_line = "An image of the installer quote/bill is attached: extract the quoted price, panel brand/wattage and inverter, and audit them against the benchmark." if img else ""
                 prompt = (
-                    f"You are UrjaMitra, a solar engineering consultant for Indian government schemes. Reply in {lang_name}. Max 150 words, no preamble, no headings.\n"
-                    f"Give exactly 3 bullets: (1) the main feasibility risk for this profile, (2) one subsidy-claim pitfall for {scheme_name}, (3) a quote audit against the benchmark. {img_line}\n"
+                   f"You are UrjaMitra, a solar engineering consultant for Indian government schemes. Reply in {lang_name}. Max 350 words, no preamble. Use short markdown ### headings with 2-3 bullets under each.\n"
+f"Sections: ### Feasibility & site risks, ### Subsidy claim: pitfalls & documents needed, ### Quote audit vs benchmark, ### Savings & maintenance tips, ### Next 3 steps. {img_line}\n"
                     f"Facts already computed (do not recompute): state {state}; system {capacity_label}; est. subsidy Rs {subsidy_amount:,}; est. net cost Rs {net_estimated_cost:,}; "
                     f"benchmark Rs {bench_gross_cost:,}; installer quote {('Rs ' + format(vendor_quote, ',')) if vendor_quote else 'not provided'}."
                 )
                 with ai_slot.container():
                     st.markdown("#### ✨ " + t("AI Insights", "एआई इनसाइट्स"))
                     live = st.empty()
-                    res = run_llm(prompt, img, img_key, live, max_tokens=500)
+                    res = run_llm(prompt, img, img_key, live, max_tokens=1400)
                 st.session_state.ai_text = res["text"]
                 st.session_state.metrics = {
                     "ttft": res["ttft"], "latency": res["latency"], "in": res["in_tok"], "out": res["out_tok"],
