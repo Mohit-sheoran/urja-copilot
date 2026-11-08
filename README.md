@@ -1,43 +1,31 @@
-# urjamitra
 # ☀️ UrjaMitra (ऊर्जा मित्र)
-### AI-Powered Solar Sizing, PM Surya Ghar Subsidy & Fair-Price Audit
+### Hybrid Solar Intelligence, PM-KUSUM Engine & Crustdata EPC Audit Copilot
 
-UrjaMitra is an LLM application designed to eliminate friction in residential and agricultural rooftop solar adoption under India's **PM Surya Ghar: Muft Bijli Yojana**.
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://urja-copilot-j2wrajqvouhrjncwgzcubn.streamlit.app/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Powered by Gemini](https://img.shields.io/badge/AI-Google%20GenAI-orange.svg)](https://ai.google.dev/)
+[![B2B Intel by Crustdata](https://img.shields.io/badge/B2B%20Data-Crustdata%20API-blueviolet.svg)](https://crustdata.com/)
+
+UrjaMitra is an open-source solar engineering and policy copilot designed to remove adoption friction for Indian households and farmers under **PM Surya Ghar: Muft Bijli Yojana** and **PM-KUSUM (Component-B)**.
 
 ---
 
 ## 🚀 Live Demo
-- **Web App:** [UrjaMitra on Streamlit Cloud](https://urjamitra-ubz8fuwuscyloy2gbn78mj.streamlit.app)
+- **Live Web Application:** [UrjaMitra on Streamlit Cloud](https://urja-copilot-j2wrajqvouhrjncwgzcubn.streamlit.app/)
+- **Repository:** [github.com/Mohit-sheoran/urja-copilot](https://github.com/Mohit-sheoran/urja-copilot)
 
 ---
 
 ## 🎯 Problem Statement
-Navigating rooftop solar economics in India is confusing for average citizens:
-- Unclear calculation of central subsidies and net out-of-pocket costs.
-- Risk of overcharging or non-DCR (Domestic Content Requirement) module fraud by unverified local vendors.
-- Tedious bureaucratic procedures for Discom net-metering NOC applications.
+Navigating rooftop solar economics and agricultural solar pumps in India presents persistent challenges:
+- **Complex Subsidy Mathematics:** Difficulty determining central and state subsidy slabs versus real out-of-pocket investment.
+- **Contractor Default & Fraud Risk:** Risk of non-DCR module fraud, equipment substitution, or abandonment by unverified local contractors prior to net-metering activation.
+- **Bureaucratic Overhead:** Intimidating administrative paperwork and state-specific DISCOM feasibility applications.
+- **AI Hallucinations in Financial Calculations:** LLMs frequently generate incorrect financial totals, misstate subsidy caps, or make arbitrary engineering recommendations when computing electrical loads.
 
 ---
 
-## 💡 Key Features
-- **Deterministic Solar Engine:** Calculates plant capacity (kWp), required roof area, and exact MNRE subsidy slabs using standard benchmarks without AI hallucinations.
-- **Grounded AI Advisory:** Uses Gemini 1.5 Flash grounded in official MNRE PM Surya Ghar operational guidelines to audit vendor quotes and detail scheme steps.
-- **Automated Discom Net-Metering Drafter:** Generates print-ready formal letters for local Sub-Divisional Officers (SDO).
-- **Multilingual Support:** Fully bilingual interface and reports supporting English and Hindi (हिंदी).
-- **Cost & Latency Tracking:** Real-time metrics tracking inference latency (<1s) and token cost ($0.00 on free tier).
+## 💡 System Architecture & Core Capabilities
 
----
-
-## 🛠️ Tech Stack
-- **Frontend / UI:** Streamlit
-- **LLM / Reasoning Engine:** Google Gemini 1.5 Flash (via `google-generativeai`)
-- **Knowledge Base:** MNRE PM Surya Ghar Operational Guidelines (Updated 2024 Slabs)
-
----
-
-## ⚙️ Local Setup
-```bash
-git clone [https://github.com/Mohit-sheoran/urjamitra.git](https://github.com/Mohit-sheoran/urjamitra.git)
-cd urjamitra
-pip install -r requirements.txt
-streamlit run app.py
+UrjaMitra uses a **hybrid design** that separates deterministic calculations from unstructured reasoning:
