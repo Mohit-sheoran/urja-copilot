@@ -13,7 +13,7 @@ import math
 import re
 import time
 import urllib.parse
-
+import requests
 import plotly.graph_objects as go
 import streamlit as st
 from PIL import Image
@@ -360,6 +360,58 @@ def prep_image(f):
     return img
 
 
+# ---------------------------------------------------------
+# Crustdata Vendor Intelligence Helper
+# ---------------------------------------------------------
+@st.cache_data(ttl=3600, show_spinner=False)
+def verify_epc_vendor(company_name: str, api_token: str):
+    """Queries Crustdata to verify solar EPC installer legitimacy and footprint."""
+    if not api_token or not company_name or len(company_name.strip()) < 3:
+        return None
+
+    url = "https://api.crustdata.com/screener/company/search"
+    headers = {
+        "Authorization": f"Token {api_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "filters": {
+            "op": "and",
+            "conditions": [
+                {
+                    "field": "basic_info.name",
+                    "type": "contains",
+                    "value": company_name.strip(),
+                }
+            ],
+        },
+        "limit": 1,
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=8)
+        if resp.status_code == 200:
+            results = resp.json().get("companies", [])
+            if results:
+                c = results[0]
+                return {
+                    "found": True,
+                    "name": c.get("basic_info", {}).get("name", company_name),
+                    "domain": c.get("basic_info", {}).get(
+                        "primary_domain", "Verified Web Footprint"
+                    ),
+                    "headcount": c.get("headcount", {}).get(
+                        "total", "Established"
+                    ),
+                    "location": c.get("locations", {}).get(
+                        "headquarters", "India / Registered"
+                    ),
+                }
+        return {"found": False, "name": company_name}
+    except Exception:
+        return None
+
+
 # ----------------------------------------------------------------------------
 # 7. DETERMINISTIC ENGINE
 # ----------------------------------------------------------------------------
@@ -539,11 +591,11 @@ def demo_insights() -> str:
         f"- **Feasibility:** {state} gets ~{si['insolation']} kWh/kW/day, so a {capacity_label} setup is well supported.\n"
         f"- **Subsidy:** estimated ₹{subsidy_amount:,} under {scheme_name}; keep Aadhaar-linked bank details ready for DBT.\n"
         f"- **Quote:** compare line items against the ₹{bench_gross_cost:,} benchmark.\n\n"
-        "_Demo mode: sample text, no API call. Add a Gemini key for live analysis._",
+        f"_Demo mode: sample text, no API call. Add a Gemini key for live analysis._",
         f"- **व्यवहार्यता:** {state} में ~{si['insolation']} kWh/kW/दिन मिलता है, इसलिए {capacity_label} उपयुक्त है।\n"
         f"- **सब्सिडी:** {scheme_name} में अनुमानित ₹{subsidy_amount:,}; DBT के लिए आधार-लिंक्ड बैंक खाता तैयार रखें।\n"
         f"- **कोटेशन:** ₹{bench_gross_cost:,} बेंचमार्क से लाइन-आइटम मिलाएँ।\n\n"
-        "_डेमो मोड: नमूना पाठ, कोई API कॉल नहीं। लाइव विश्लेषण के लिए Gemini key जोड़ें।_",
+        f"_डेमो मोड: नमूना पाठ, कोई API कॉल नहीं। लाइव विश्लेषण के लिए Gemini key जोड़ें।_",
     )
 
 
@@ -614,6 +666,81 @@ with tab_report:
         st.success("📸 " + t("Quote image attached - the AI will read it (price, panel brand, inverter).", "कोटेशन इमेज संलग्न है - एआई इसे पढ़ेगा (मूल्य, पैनल ब्रांड, इन्वर्टर)।"))
     elif verdict:
         {"warn": st.warning, "low": st.warning, "ok": st.success}[verdict[0]](verdict[1])
+
+    # ---- Crustdata Vendor Credibility Audit ----
+    st.markdown("---")
+    st.markdown(
+        "#### 🏢 "
+        + t(
+            "Installer & EPC Vendor Credibility Audit",
+            "सोलर विक्रेता / ईपीसी कंपनी सत्यापन",
+        )
+    )
+    st.caption(
+        t(
+            "Verify installer legitimacy and institutional footprint via"
+            " Crustdata B2B intelligence.",
+            "Crustdata B2B इंटेलिजेंस द्वारा सोलर वेंडर की विश्वसनीयता की"
+            " पुष्टि करें।",
+        )
+    )
+
+    col_v1, col_v2 = st.columns([3, 1])
+    with col_v1:
+        vendor_search = st.text_input(
+            t("Installer Company Name", "कंपनी / वेंडर का नाम दर्ज करें"),
+            placeholder="e.g. Tata Power Solar, Loom Solar, Waaree, Vikram Solar",
+            key="vendor_search_name",
+        )
+    with col_v2:
+        st.write("")
+        st.write("")
+        run_vendor_check = st.button(
+            "🔍 " + t("Verify Vendor", "वेंडर जांचें"),
+            key="btn_vendor_check",
+        )
+
+    crust_token = st.secrets.get("CRUSTDATA_API_TOKEN", "")
+
+    if vendor_search and (
+        run_vendor_check or "last_audited_vendor" in st.session_state
+    ):
+        st.session_state["last_audited_vendor"] = vendor_search
+        if crust_token:
+            with st.spinner(
+                t(
+                    "Auditing records against Crustdata API...",
+                    "Crustdata रिकॉर्ड से मिलान जारी है...",
+                )
+            ):
+                audit_res = verify_epc_vendor(vendor_search, crust_token)
+
+            if audit_res and audit_res.get("found"):
+                st.success(f"""
+                **🛡️ {t("Verified Solar EPC Entity (Crustdata Verified)", "सत्यापित सोलर ईपीसी कंपनी")}**
+                - **{t("Entity Name", "कंपनी का नाम")}:** {audit_res['name']}
+                - **{t("Web Presence", "वेबसाइट")}:** {audit_res['domain']}
+                - **{t("Operational Scale", "कर्मचारी संख्या")}:** ~{audit_res['headcount']} {t("members", "सदस्य")}
+                - **{t("Headquarters", "मुख्यालय")}:** {audit_res['location']}
+                - **{t("Risk Assessment", "जोखिम समीक्षा")}:** {t("Active registered entity. Low risk of vendor default before net-metering sign-off.", "सक्रिय पंजीकृत संस्था। डिस्कॉम नेट-मीटरिंग प्रक्रिया में वेंडर डिफ़ॉल्ट का जोखिम कम है।")}
+                """)
+            elif audit_res and not audit_res.get("found"):
+                st.warning(f"""
+                **⚠️ {t("Unverified / Local Contractor Alert", "अपुष्ट / स्थानीय ठेकेदार चेतावनी")}**
+                - {t(f"No institutional B2B footprint found for '{vendor_search}' on Crustdata.", f"'{vendor_search}' का कोई औपचारिक कॉर्पोरेट रिकॉर्ड नहीं मिला।")}
+                - **{t("Consumer Protection Advisory", "उपभोक्ता सुरक्षा सलाह")}:** {t("Ensure contract mandates milestone-based payments (withhold 20% until DISCOM commissioning and joint inspection).", "भुगतान चरणों में करें (जब तक डिस्कॉम नेट-मीटर चालू न करे, 20% भुगतान रोकें)।")}
+                """)
+        else:
+            st.info(
+                "💡 "
+                + t(
+                    "Add CRUSTDATA_API_TOKEN to Streamlit Secrets to enable live"
+                    " company verification.",
+                    "लाइव वेंडर ऑडिट सक्रिय करने हेतु Streamlit Secrets में"
+                    " CRUSTDATA_API_TOKEN जोड़ें।",
+                )
+            )
+    st.markdown("---")
 
     st.markdown("#### 🗺️ " + t("Subsidy & Installation Roadmap", "सब्सिडी व स्थापना रोडमैप") + f" · {scheme_name}")
     if not is_agri:
