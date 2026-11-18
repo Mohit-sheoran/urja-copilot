@@ -1,4 +1,4 @@
-"""Deterministic solar sizing, subsidy math, 25-year ROI, BoM & DISCOM letter builder."""
+"""Deterministic solar sizing, subsidy math (all-India & 3 irrigation modes), 25-year ROI, BoM & letters."""
 
 import math
 from core.config import CFG, STATE_DB, tr
@@ -105,31 +105,127 @@ def calc_rooftop(
     }
 
 
-def calc_pump(state: str, hp: float, pump_type: str, depth_ft: int, diesel_l: float, quote: float) -> dict:
+def calc_pump(
+    state: str,
+    hp: float,
+    pump_type: str,
+    depth_ft: int,
+    irr_mode: str,
+    usage_val: float,
+    quote: float,
+    is_hi: bool = False,
+) -> dict:
+    """
+    Universal PM-KUSUM Calculator supporting all 3 real Indian irrigation setups:
+    - 'GRID_C': Existing Grid-Connected Electric Pump Solarization (PM-KUSUM Component-C IPS)
+    - 'DIESEL_B': Off-Grid Diesel Pump Replacement (PM-KUSUM Component-B)
+    - 'NEW_BORE_B': New Borewell / Unconnected Farm avoiding grid extension (PM-KUSUM Component-B)
+    """
     st_info = STATE_DB[state]
+    insol = st_info["insolation"]
     head_m = round(depth_ft * 0.3048, 1)
     min_hp = 3 if head_m <= 25 else (5 if head_m <= 45 else (7.5 if head_m <= 70 else 10))
-    array_kwp = round(hp * CFG["array_kwp_per_hp"][pump_type], 2)
 
-    bench = CFG["pump_cost"][hp]
-    c_sub = round(bench * CFG["central_kusum_pct"] / 100)
-    s_sub = round(bench * st_info["kusum_state_sub"] / 100)
-    sub = c_sub + s_sub
-    eff_cost = quote if quote > 0 else bench
-    net = max(0, eff_cost - sub)
+    c_pct = st_info["central_kusum_pct"]
+    s_pct = st_info["kusum_state_sub"]
 
-    save_yr1 = round(diesel_l * 92 * 12)
-    payback = round(net / max(1.0, save_yr1), 1) if save_yr1 > 0 else 99.0
-    co2_yr = round((diesel_l * 12 * 2.68) / 1000, 1)
+    if irr_mode == "GRID_C":
+        # Component-C (IPS): Farmer keeps existing electric pump; installs up to 2x pump kW (~1.5 kWp/HP)
+        scheme_code = "PM-KUSUM Component-C (IPS)"
+        array_kwp = round(hp * CFG["comp_c_kwp_per_hp"], 2)
+        bench = round(array_kwp * CFG["comp_c_cost_per_kwp"])
+        # MNRE subsidy capped at 7.5 HP equivalent (11.25 kWp)
+        sub_eligible_cost = min(bench, round(7.5 * CFG["comp_c_kwp_per_hp"] * CFG["comp_c_cost_per_kwp"]))
+        c_sub = round(sub_eligible_cost * c_pct / 100)
+        s_sub = round(sub_eligible_cost * s_pct / 100)
+        sub = c_sub + s_sub
+        eff_cost = quote if quote > 0 else bench
+        net = max(0, eff_cost - sub)
+
+        # Annual solar generation vs farm pump self-consumption (usage_val = irrigation hours/day)
+        gen_yr1 = array_kwp * insol * 365 * 0.80
+        pump_kw = hp * 0.746
+        # Typical 220 irrigation days/year
+        self_use_kwh = min(gen_yr1 * 0.75, pump_kw * usage_val * 220)
+        export_kwh = max(0.0, gen_yr1 - self_use_kwh)
+
+        bill_saved = self_use_kwh * st_info["agri_tariff"]
+        export_income = export_kwh * st_info["fit_rate"]
+        gross_save_yr1 = round(bill_saved + export_income)
+        annual_om = round(bench * 0.012)  # 1.2% annual cleaning & net-meter upkeep
+        net_save_yr1 = max(0, gross_save_yr1 - annual_om)
+        co2_yr = round((gen_yr1 * CFG["grid_co2_kg_per_kwh"]) / 1000, 1)
+
+        economics_note = tr(
+            f"Grid-tied {array_kwp} kWp array generates ~{round(gen_yr1):,} units/yr: saves ₹{round(bill_saved):,}/yr on farm power (@ ₹{st_info['agri_tariff']}/unit) + earns ₹{round(export_income):,}/yr selling {round(export_kwh):,} surplus units to {st_info['discom']} (@ ₹{st_info['fit_rate']}/unit).",
+            f"ग्रिड-युक्त {array_kwp} kWp ऐरे ~{round(gen_yr1):,} यूनिट/वर्ष बनाता है: कृषि बिजली बिल में ₹{round(bill_saved):,}/वर्ष की बचत (@ ₹{st_info['agri_tariff']}/यूनिट) + {st_info['discom']} को {round(export_kwh):,} अतिरिक्त यूनिट बेचकर ₹{round(export_income):,}/वर्ष की आय।",
+            is_hi,
+        )
+
+    elif irr_mode == "DIESEL_B":
+        # Component-B: Standalone solar pump replacing diesel engine (usage_val = monthly diesel litres)
+        scheme_code = "PM-KUSUM Component-B (Off-Grid)"
+        array_kwp = round(hp * CFG["array_kwp_per_hp"][pump_type], 2)
+        bench = CFG["pump_cost_comp_b"][hp]
+        # MNRE subsidy capped at 7.5 HP benchmark
+        sub_eligible_cost = min(bench, CFG["pump_cost_comp_b"][7.5])
+        c_sub = round(sub_eligible_cost * c_pct / 100)
+        s_sub = round(sub_eligible_cost * s_pct / 100)
+        sub = c_sub + s_sub
+        eff_cost = quote if quote > 0 else bench
+        net = max(0, eff_cost - sub)
+
+        diesel_saved_yr = usage_val * st_info["diesel_price"] * 12
+        engine_maint_saved = 9000  # Avoided diesel engine oil/filter/overhaul cost
+        gross_save_yr1 = round(diesel_saved_yr + engine_maint_saved)
+        annual_om = round(bench * 0.015)
+        net_save_yr1 = max(0, gross_save_yr1 - annual_om)
+        co2_yr = round((usage_val * 12 * 2.68) / 1000, 1)
+
+        economics_note = tr(
+            f"Replaces {round(usage_val)} L/month diesel (@ ₹{st_info['diesel_price']}/L = ₹{round(diesel_saved_yr):,}/yr) + saves ~₹9,000/yr in diesel engine servicing.",
+            f"{round(usage_val)} लीटर/माह डीजल (@ ₹{st_info['diesel_price']}/लीटर = ₹{round(diesel_saved_yr):,}/वर्ष) की बचत + डीजल इंजन रखरखाव में ~₹9,000/वर्ष की बचत।",
+            is_hi,
+        )
+
+    else:
+        # NEW_BORE_B: New tubewell avoiding new grid transformer/line extension + rented water/generator
+        scheme_code = "PM-KUSUM Component-B (New Tubewell)"
+        array_kwp = round(hp * CFG["array_kwp_per_hp"][pump_type], 2)
+        bench = CFG["pump_cost_comp_b"][hp]
+        sub_eligible_cost = min(bench, CFG["pump_cost_comp_b"][7.5])
+        c_sub = round(sub_eligible_cost * c_pct / 100)
+        s_sub = round(sub_eligible_cost * s_pct / 100)
+        sub = c_sub + s_sub
+        eff_cost = quote if quote > 0 else bench
+        # Avoided dedicated transformer / pole line connection cost (~₹1.6L typical for new AP connection)
+        net = max(0, eff_cost - sub)
+
+        # usage_val = monthly rented water / generator irrigation expense (₹/month)
+        gross_save_yr1 = round(usage_val * 12)
+        annual_om = round(bench * 0.015)
+        net_save_yr1 = max(0, gross_save_yr1 - annual_om)
+        gen_yr1 = array_kwp * insol * 365 * 0.80
+        co2_yr = round((gen_yr1 * CFG["grid_co2_kg_per_kwh"]) / 1000, 1)
+
+        economics_note = tr(
+            f"Saves ₹{round(usage_val):,}/month (₹{gross_save_yr1:,}/yr) in rented water / generator irrigation while avoiding ₹1.5L–₹2.5L new AP transformer & line extension delays.",
+            f"किराये के पानी / जनरेटर सिंचाई में ₹{round(usage_val):,}/माह (₹{gross_save_yr1:,}/वर्ष) की बचत और नए कृषि ट्रांसफार्मर/लाइन खर्च से मुक्ति।",
+            is_hi,
+        )
+
+    payback = round(net / max(1.0, net_save_yr1), 1) if net_save_yr1 > 0 else 99.0
 
     years = list(range(0, 26))
     cum = [-net]
     bal = -net
     total_gross = 0.0
     for y in range(1, 26):
-        s = save_yr1 * ((1 + 0.04) ** (y - 1))
-        total_gross += s
-        bal += s
+        gross_y = gross_save_yr1 * ((1 - CFG["degradation"]) ** (y - 1)) * ((1 + 0.03) ** (y - 1))
+        om_y = annual_om * ((1 + 0.03) ** (y - 1))
+        net_y = gross_y - om_y
+        total_gross += net_y
+        bal += net_y
         cum.append(round(bal))
 
     diff = (quote - bench) if quote > 0 else 0
@@ -143,8 +239,20 @@ def calc_pump(state: str, hp: float, pump_type: str, depth_ft: int, diesel_l: fl
     else:
         verdict = "FAIR"
 
+    cap_note = (
+        tr(
+            "Note: Under MNRE guidelines, Central/State subsidy for 10 HP is capped at the 7.5 HP benchmark.",
+            "नोट: MNRE नियमों के तहत 10 HP पंप पर सब्सिडी 7.5 HP मानक लागत तक ही सीमित है।",
+            is_hi,
+        )
+        if hp > 7.5
+        else ""
+    )
+
     return {
         "sector": "PUMP",
+        "irr_mode": irr_mode,
+        "scheme_code": scheme_code,
         "state": state,
         "st": st_info,
         "hp": hp,
@@ -159,7 +267,7 @@ def calc_pump(state: str, hp: float, pump_type: str, depth_ft: int, diesel_l: fl
         "sub": sub,
         "eff_cost": eff_cost,
         "net": net,
-        "save_yr1": save_yr1,
+        "save_yr1": net_save_yr1,
         "payback": payback,
         "co2_yr": co2_yr,
         "years": years,
@@ -170,6 +278,8 @@ def calc_pump(state: str, hp: float, pump_type: str, depth_ft: int, diesel_l: fl
         "diff": round(diff),
         "diff_pct": diff_pct,
         "verdict": verdict,
+        "economics_note": economics_note,
+        "cap_note": cap_note,
     }
 
 
@@ -223,7 +333,48 @@ def build_bom(r: dict, is_hi: bool):
                 tr("Utility", "विद्युत विभाग", is_hi),
             ),
         ]
+
     n_mod = math.ceil((r["array_kwp"] * 1000) / 540)
+    if r.get("irr_mode") == "GRID_C":
+        return [
+            (
+                tr("Grid-Tied Solar Array (DCR)", "ग्रिड-युक्त सोलर ऐरे (DCR)", is_hi),
+                tr(
+                    f"{n_mod} × 540 Wp ({r['array_kwp']} kWp) ALMM/DCR Solar Modules (up to 2× pump kW)",
+                    f"{n_mod} × 540 Wp ({r['array_kwp']} kWp) ALMM/DCR सोलर मॉड्यूल",
+                    is_hi,
+                ),
+                tr("25 yrs", "25 वर्ष", is_hi),
+            ),
+            (
+                tr("Solar Grid-Tie Inverter / VFD", "सोलर ग्रिड-टाई इनवर्टर / VFD", is_hi),
+                tr(
+                    f"{r['array_kwp']} kW IP65 Bi-directional Solar Inverter for existing {r['hp']:g} HP pump",
+                    f"मौजूदा {r['hp']:g} HP पंप हेतु {r['array_kwp']} kW IP65 सोलर इनवर्टर",
+                    is_hi,
+                ),
+                tr("5 yrs", "5 वर्ष", is_hi),
+            ),
+            (
+                tr("Existing Electric Pump-Set", "मौजूदा इलेक्ट्रिक पंप", is_hi),
+                tr(
+                    f"Reuses farmer's existing {r['hp']:g} HP grid-connected motor (zero pump replacement cost)",
+                    f"किसान की मौजूदा {r['hp']:g} HP मोटर का ही उपयोग (नए पंप का खर्च नहीं)",
+                    is_hi,
+                ),
+                tr("Existing Asset", "मौजूदा उपकरण", is_hi),
+            ),
+            (
+                tr("Bi-Directional Net Meter", "द्वि-दिशात्मक नेट मीटर", is_hi),
+                tr(
+                    f"DISCOM-approved export/import meter ({r['st']['discom']}) for surplus power billing",
+                    f"अतिरिक्त बिजली बिक्री हेतु {r['st']['discom']} अनुमोदित नेट मीटर",
+                    is_hi,
+                ),
+                tr("Utility", "विद्युत विभाग", is_hi),
+            ),
+        ]
+
     return [
         (
             tr("Solar PV Array (DCR)", "सोलर ऐरे (DCR)", is_hi),
@@ -299,13 +450,18 @@ def build_letter(r: dict, name: str, cid: str, addr: str, is_hi: bool) -> str:
             f"Yours faithfully,\n{nm}\nConsumer No.: {ca}"
         )
 
+    is_comp_c = r.get("irr_mode") == "GRID_C"
+    target_office = st_info["discom"] if is_comp_c else st_info["agri_agency"]
+    scheme_title = "पीएम-कुसुम (घटक-C: ग्रिड पंप सोलराइजेशन)" if is_comp_c else "पीएम-कुसुम (घटक-B: ऑफ-ग्रिड सोलर पंप)"
+    scheme_title_en = "PM-KUSUM Component-C (Individual Grid Pump Solarization)" if is_comp_c else "PM-KUSUM Component-B (Standalone Off-Grid Solar Pump)"
+
     if is_hi:
         return (
-            f"सेवा में,\nपरियोजना निदेशक,\n{st_info['agri_agency']}, {r['state']}\n\n"
-            f"विषय: पीएम-कुसुम (घटक-B) के अंतर्गत {r['hp']:g} HP ({r['pump_type']}) सोलर कृषि पंप हेतु आवेदन।\n\n"
+            f"सेवा में,\nपरियोजना निदेशक / उपमंडल अधिकारी,\n{target_office}, {r['state']}\n\n"
+            f"विषय: {scheme_title} के अंतर्गत {r['hp']:g} HP सोलर कृषि पंप ({r['array_kwp']} kWp) हेतु आवेदन।\n\n"
             f"महोदय / महोदया,\n\n"
-            f"मैं {nm} (भू-अभिलेख / खसरा संख्या: {ca}, पता: {ad}) अपने खेत पर सिंचाई हेतु पीएम-कुसुम योजना (घटक-B) के अंतर्गत "
-            f"{r['hp']:g} HP ({r['pump_type']}) सबमर्सिबल सोलर पंप ({r['array_kwp']} kWp सोलर ऐरे) स्थापित करना चाहता/चाहती हूँ।\n\n"
+            f"मैं {nm} (खाता / खसरा संख्या: {ca}, पता: {ad}) अपने खेत पर सिंचाई हेतु {scheme_title} के अंतर्गत "
+            f"{r['hp']:g} HP पंप हेतु {r['array_kwp']} kWp सोलर संयंत्र स्थापित करना चाहता/चाहती हूँ।\n\n"
             f"परियोजना विवरण:\n"
             f"• जल स्तर गहराई: {r['depth_ft']} फीट ({r['head_m']} मीटर हेड)\n"
             f"• मानक लागत: ₹{r['eff_cost']:,} | कुल अनुदान (केंद्र + राज्य): ₹{r['sub']:,} | कृषक अंश: ₹{r['net']:,}\n\n"
@@ -313,11 +469,11 @@ def build_letter(r: dict, name: str, cid: str, addr: str, is_hi: bool) -> str:
             f"भवदीय,\n{nm}"
         )
     return (
-        f"To,\nThe Project Director,\n{st_info['agri_agency']}, {r['state']}\n\n"
-        f"Subject: Application for {r['hp']:g} HP ({r['pump_type']}) Standalone Solar Agricultural Pump under PM-KUSUM Component-B.\n\n"
+        f"To,\nThe Project Director / Sub-Divisional Officer,\n{target_office}, {r['state']}\n\n"
+        f"Subject: Application for {r['hp']:g} HP Agricultural Pump Solarization ({r['array_kwp']} kWp) under {scheme_title_en}.\n\n"
         f"Respected Sir / Madam,\n\n"
-        f"I, {nm} (Land / Khasra ID: {ca}, Address: {ad}), apply for the installation of a {r['hp']:g} HP ({r['pump_type']}) "
-        f"solar submersible water pump ({r['array_kwp']} kWp DCR PV array) on my agricultural land under PM-KUSUM Component-B.\n\n"
+        f"I, {nm} (Account / Khasra ID: {ca}, Address: {ad}), apply for the installation of a {r['array_kwp']} kWp DCR solar PV system "
+        f"for my {r['hp']:g} HP irrigation pump under {scheme_title_en}.\n\n"
         f"Technical & Financial Summary:\n"
         f"• Borewell Water Depth: {r['depth_ft']} ft ({r['head_m']} m dynamic head)\n"
         f"• Benchmark Cost: ₹{r['eff_cost']:,} | Combined Subsidy (Central + State): ₹{r['sub']:,} | Farmer Share: ₹{r['net']:,}\n\n"
