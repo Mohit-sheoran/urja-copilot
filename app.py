@@ -879,7 +879,7 @@ with tab4:
                 )
 
     safe_letter_html = html.escape(draft_letter).replace("\n", "<br>")
-    st.markdown(f'<div class="paper-letter">{safe_letter_html}</div>', unsafe_allow_html=True))
+    st.markdown(f'<div class="paper-letter">{safe_letter_html}</div>', unsafe_allow_html=True)
     st.download_button(
         f"📥 {tr('Download Official Letter (.txt)', 'आधिकारिक पत्र डाउनलोड करें (.txt)', is_hi)}",
         data=draft_letter,
