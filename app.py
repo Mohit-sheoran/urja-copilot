@@ -1,4 +1,4 @@
-"""UrjaMitra (ऊर्जा मित्र) — Modular Streamlit Entry Point."""
+"""UrjaMitra (ऊर्जा मित्र) — Universal All-India Solar & PM-KUSUM Entry Point."""
 
 import math
 import urllib.parse
@@ -37,13 +37,13 @@ def _get_crustdata_token() -> str:
 
 
 def _fmt_lakh(val: float, is_hi: bool) -> str:
-    """Format INR value in Indian Lakhs (e.g., ₹2L or ₹2 लाख)."""
+    """Format INR value cleanly in Indian Lakhs (e.g., ₹2L or ₹2.5 लाख)."""
     if val == 0:
         return "₹0"
-    lakhs = val / 100000.0
+    lakhs = round(val / 100000.0, 1)
     sign = "-" if lakhs < 0 else ""
     abs_l = abs(lakhs)
-    num_str = f"{abs_l:g}" if abs_l >= 1 else f"{abs_l:.1f}"
+    num_str = f"{abs_l:g}"
     unit = " लाख" if is_hi else "L"
     return f"{sign}₹{num_str}{unit}"
 
@@ -107,12 +107,15 @@ with st.sidebar:
         [
             tr("Custom User Input", "कस्टम उपयोगकर्ता इनपुट", is_hi),
             tr("🏠 Haryana Home (Overpriced Quote Alert)", "🏠 हरियाणा घर (महंगा कोटेशन अलर्ट)", is_hi),
-            tr("🌾 Rajasthan Farmer (7.5 HP PM-KUSUM)", "🌾 राजस्थान किसान (7.5 HP पीएम-कुसुम)", is_hi),
+            tr("⚡ Haryana Grid Farmer (5 HP Component-C)", "⚡ हरियाणा ग्रिड किसान (5 HP घटक-C)", is_hi),
+            tr("🚜 Rajasthan Off-Grid Farmer (7.5 HP Diesel)", "🚜 राजस्थान ऑफ-ग्रिड किसान (7.5 HP डीजल)", is_hi),
         ],
         label_visibility="collapsed",
     )
     is_preset_home = "Haryana Home" in preset or "हरियाणा घर" in preset
-    is_preset_farm = "Rajasthan Farmer" in preset or "राजस्थान किसान" in preset
+    is_preset_grid_farm = "Haryana Grid" in preset or "हरियाणा ग्रिड" in preset
+    is_preset_diesel_farm = "Rajasthan Off-Grid" in preset or "राजस्थान ऑफ-ग्रिड" in preset
+    is_any_farm_preset = is_preset_grid_farm or is_preset_diesel_farm
 
     st.divider()
     st.markdown(f"### ⚙️ {tr('Consumer Profile', 'उपभोक्ता प्रोफ़ाइल', is_hi)}")
@@ -122,8 +125,8 @@ with st.sidebar:
         st.warning(f"⚠️ {tr('No GEMINI_API_KEY in secrets', 'Secrets में GEMINI_API_KEY नहीं मिली', is_hi)}")
 
     state_keys = list(STATE_DB.keys())
-    default_state_idx = 1 if is_preset_farm else 0
-    state = st.selectbox(tr("📍 State", "📍 राज्य", is_hi), state_keys, index=default_state_idx)
+    default_state_idx = 2 if is_preset_diesel_farm else 0
+    state = st.selectbox(tr("📍 State / Region", "📍 राज्य / क्षेत्र", is_hi), state_keys, index=default_state_idx)
 
     sector_opts = [
         tr("🏠 Residential Rooftop (PM Surya Ghar)", "🏠 घरेलू रूफटॉप (पीएम सूर्य घर)", is_hi),
@@ -132,7 +135,7 @@ with st.sidebar:
     sector_label = st.radio(
         tr("⚡ Sector", "⚡ क्षेत्र", is_hi),
         sector_opts,
-        index=1 if is_preset_farm else 0,
+        index=1 if is_any_farm_preset else 0,
     )
     is_rooftop = "Residential" in sector_label or "घरेलू" in sector_label
 
@@ -152,25 +155,58 @@ with st.sidebar:
             0.5, 50.0, 2.0, 0.5
         )
     else:
-        st.markdown(f"### 🌾 {tr('PM-KUSUM Pump Parameters', 'पीएम-कुसुम पंप विवरण', is_hi)}")
+        st.markdown(f"### 🌾 {tr('PM-KUSUM Irrigation Setup', 'पीएम-कुसुम सिंचाई विवरण', is_hi)}")
+        irr_options = [
+            tr("⚡ Existing Grid Electric Pump (Component-C)", "⚡ मौजूदा ग्रिड इलेक्ट्रिक पंप (घटक-C)", is_hi),
+            tr("⛽ Off-Grid Diesel Pump Replacement (Component-B)", "⛽ ऑफ-ग्रिड डीजल पंप प्रतिस्थापन (घटक-B)", is_hi),
+            tr("💧 New Borewell / Unconnected Farm (Component-B)", "💧 नया बोरवेल / बिना बिजली खेत (घटक-B)", is_hi),
+        ]
+        irr_choice = st.radio(
+            tr("Current Watering Setup", "वर्तमान सिंचाई व्यवस्था", is_hi),
+            irr_options,
+            index=1 if is_preset_diesel_farm else 0,
+        )
+        if "Component-C" in irr_choice or "घटक-C" in irr_choice:
+            irr_mode = "GRID_C"
+        elif "Diesel" in irr_choice or "डीजल" in irr_choice:
+            irr_mode = "DIESEL_B"
+        else:
+            irr_mode = "NEW_BORE_B"
+
         hp = st.select_slider(
             tr("Pump Capacity (HP)", "पंप क्षमता (HP)", is_hi),
             options=[3, 5, 7.5, 10],
-            value=7.5 if is_preset_farm else 5,
+            value=7.5 if is_preset_diesel_farm else 5,
         )
-        pump_type = st.selectbox(tr("Pump Motor Type", "पंप मोटर प्रकार", is_hi), ["DC", "AC", "SURFACE"])
+        pump_type = (
+            "GRID_EXISTING"
+            if irr_mode == "GRID_C"
+            else st.selectbox(tr("New Solar Pump Type", "नया सोलर पंप प्रकार", is_hi), ["DC", "AC", "SURFACE"])
+        )
         depth_ft = st.number_input(
             tr("Borewell Water Depth (ft)", "बोरवेल जल गहराई (फीट)", is_hi),
-            20, 450, 180 if is_preset_farm else 120, 10
+            20, 450, 180 if is_preset_diesel_farm else 120, 10
         )
-        diesel_l = st.number_input(
-            tr("Monthly Diesel Saved (Litres)", "मासिक डीजल बचत (लीटर)", is_hi),
-            0, 1500, 180 if is_preset_farm else 120, 10
-        )
+
+        if irr_mode == "GRID_C":
+            usage_val = st.slider(
+                tr("Avg. Daily Irrigation Hours (during season)", "औसत दैनिक सिंचाई घंटे", is_hi),
+                1.0, 10.0, 5.0, 0.5
+            )
+        elif irr_mode == "DIESEL_B":
+            usage_val = st.number_input(
+                tr("Avg. Monthly Diesel Used (Litres/mo)", "औसत मासिक डीजल खपत (लीटर/माह)", is_hi),
+                10, 1000, 90 if is_preset_diesel_farm else 75, 5
+            )
+        else:
+            usage_val = st.number_input(
+                tr("Monthly Rented Water / Generator Cost (₹)", "मासिक किराये का पानी / जनरेटर खर्च (₹)", is_hi),
+                500, 50000, 4500, 500
+            )
 
     st.divider()
     st.markdown(f"### 🔍 {tr('Vendor Quote & OCR', 'वेंडर कोटेशन और OCR', is_hi)}")
-    default_quote = 285000 if is_preset_home else (345000 if is_preset_farm else 0)
+    default_quote = 285000 if is_preset_home else 0
     quote = st.number_input(tr("Installer Quoted Total (₹)", "वेंडर की कुल कीमत (₹)", is_hi), 0, 5000000, default_quote, 5000)
     uploaded_img = st.file_uploader(
         tr("Upload Quote / Bill Image (Optional)", "कोटेशन / बिल की फोटो अपलोड करें", is_hi),
@@ -186,13 +222,17 @@ with st.sidebar:
 # ---------------------------------------------------------
 # 3. Deterministic Calculation & KPI Strip
 # ---------------------------------------------------------
-res = calc_rooftop(state, bill, roof_sqft, sanc_kw, quote, is_hi=is_hi) if is_rooftop else calc_pump(state, hp, pump_type, depth_ft, diesel_l, quote)
+res = (
+    calc_rooftop(state, bill, roof_sqft, sanc_kw, quote, is_hi=is_hi)
+    if is_rooftop
+    else calc_pump(state, hp, pump_type, depth_ft, irr_mode, usage_val, quote, is_hi=is_hi)
+)
 st_info = res["st"]
 
 scheme_tag = (
     tr("PM Surya Ghar Muft Bijli Yojana", "पीएम सूर्य घर: मुफ्त बिजली योजना", is_hi)
     if is_rooftop
-    else tr("PM-KUSUM Component-B", "पीएम-कुसुम (घटक-B)", is_hi)
+    else res["scheme_code"]
 )
 H(
     f"""
@@ -215,12 +255,24 @@ with c1:
     sub = (
         f"⚡ ~{res['daily_units']} {tr('units/day', 'यूनिट/दिन', is_hi)} · {res['offset_pct']}% {tr('of usage', 'खपत की पूर्ति', is_hi)}"
         if is_rooftop
-        else f"💧 {res['head_m']}m {tr('head', 'हेड', is_hi)} · {res['pump_type']} {tr('pump', 'पंप', is_hi)}"
+        else (
+            tr("Grid-Tied Array (Reuses Pump)", "ग्रिड-युक्त ऐरे (मौजूदा पंप)", is_hi)
+            if res["irr_mode"] == "GRID_C"
+            else f"💧 {res['head_m']}m {tr('head', 'हेड', is_hi)} · {res['pump_type']} {tr('pump', 'पंप', is_hi)}"
+        )
     )
     H(f'<div class="kpi-card"><div class="kpi-title">{tr("RECOMMENDED SYSTEM", "अनुशंसित क्षमता", is_hi)}</div><p class="kpi-value">{val}</p><div class="kpi-sub">{sub}</div></div>')
 
 with c2:
-    sub2 = tr("Central MNRE direct DBT", "केंद्रीय MNRE प्रत्यक्ष DBT", is_hi) if is_rooftop else tr(f"30% Central + {st_info['kusum_state_sub']}% State", f"30% केंद्र + {st_info['kusum_state_sub']}% राज्य", is_hi)
+    sub2 = (
+        tr("Central MNRE direct DBT", "केंद्रीय MNRE प्रत्यक्ष DBT", is_hi)
+        if is_rooftop
+        else tr(
+            f"{st_info['central_kusum_pct']}% Central + {st_info['kusum_state_sub']}% State",
+            f"{st_info['central_kusum_pct']}% केंद्र + {st_info['kusum_state_sub']}% राज्य",
+            is_hi,
+        )
+    )
     H(f'<div class="kpi-card green"><div class="kpi-title">{tr("EST. GOVT SUBSIDY", "अनुमानित सरकारी सब्सिडी", is_hi)}</div><p class="kpi-value">₹{res["sub"]:,}</p><div class="kpi-sub">🏛️ {sub2}</div></div>')
 
 with c3:
@@ -240,21 +292,25 @@ if is_rooftop:
         )
     )
     st.caption(f"ℹ️ {res['load_note']}")
-elif res["hp"] < res["min_hp"]:
-    st.warning(
-        tr(
-            f"⚠️ {res['depth_ft']} ft depth ({res['head_m']}m head) typically requires at least a **{res['min_hp']} HP** pump.",
-            f"⚠️ {res['depth_ft']} फीट गहराई ({res['head_m']}m हेड) के लिए आमतौर पर कम से कम **{res['min_hp']} HP** पंप की आवश्यकता होती है।",
-            is_hi,
+else:
+    st.info(f"🌾 **{tr('Regional Irrigation Economics:', 'क्षेत्रीय सिंचाई अर्थशास्त्र:', is_hi)}** {res['economics_note']}")
+    if res.get("cap_note"):
+        st.caption(f"ℹ️ {res['cap_note']}")
+    if res["hp"] < res["min_hp"] and res["irr_mode"] != "GRID_C":
+        st.warning(
+            tr(
+                f"⚠️ {res['depth_ft']} ft depth ({res['head_m']}m head) typically requires at least a **{res['min_hp']} HP** pump.",
+                f"⚠️ {res['depth_ft']} फीट गहराई ({res['head_m']}m हेड) के लिए आमतौर पर कम से कम **{res['min_hp']} HP** पंप की आवश्यकता होती है।",
+                is_hi,
+            )
         )
-    )
 
 # WhatsApp Summary Share
 wa_msg = (
     f"☀️ UrjaMitra Solar Estimate ({state})\n"
     f"• System: {res['rec_kw'] if is_rooftop else res['hp']} {'kW Rooftop' if is_rooftop else 'HP Pump'}\n"
     f"• Est. Subsidy: ₹{res['sub']:,}\n"
-    f"• Net Cost: ₹{res['net']:,} | Savings: ₹{res['save_yr1']:,}/yr"
+    f"• Net Cost: ₹{res['net']:,} | Net Savings: ₹{res['save_yr1']:,}/yr"
 )
 wa_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(wa_msg)}"
 st.link_button(f"💬 {tr('Share on WhatsApp', 'WhatsApp पर साझा करें', is_hi)}", wa_url)
@@ -281,7 +337,7 @@ with tab1:
     with v_col1:
         vendor_name = st.text_input(
             tr("Installer Company Name", "इंस्टॉलर कंपनी का नाम", is_hi),
-            value="Waaree" if (is_preset_home or is_preset_farm) else "",
+            value="Waaree" if (is_preset_home or is_any_farm_preset) else "",
             placeholder=tr("e.g. Tata Power Solar, Loom Solar, Waaree, Vikram Solar", "जैसे: Tata Power Solar, Loom Solar, Waaree", is_hi),
             key="vendor_input",
         )
@@ -337,11 +393,11 @@ with tab1:
     H(
         f"""
         <div class="stepper-container">
-          <div class="step-item"><div class="step-num">1</div><div class="step-title">{tr("Portal registration", "पोर्टल पंजीकरण", is_hi)}</div><div class="step-desc">{tr("Register on pmsuryaghar.gov.in with consumer details.", "उपभोक्ता विवरण के साथ pmsuryaghar.gov.in पर पंजीकरण करें।", is_hi)}</div></div>
-          <div class="step-item"><div class="step-num">2</div><div class="step-title">{tr("DISCOM feasibility", "DISCOM व्यवहार्यता", is_hi)}</div><div class="step-desc">{tr("Apply online to the local utility for grid approval.", "ग्रिड स्वीकृति के लिए स्थानीय विद्युत विभाग में ऑनलाइन आवेदन करें।", is_hi)}</div></div>
-          <div class="step-item"><div class="step-num">3</div><div class="step-title">{tr("Vendor installation", "वेंडर द्वारा स्थापना", is_hi)}</div><div class="step-desc">{tr("Install through an MNRE-empanelled vendor.", "MNRE-पंजीकृत वेंडर के माध्यम से सोलर संयंत्र लगवाएं।", is_hi)}</div></div>
-          <div class="step-item"><div class="step-num">4</div><div class="step-title">{tr("Net-meter inspection", "नेट-मीटर निरीक्षण", is_hi)}</div><div class="step-desc">{tr("Utility inspects the site and fits a bi-directional meter.", "विभाग साइट का निरीक्षण कर द्वि-दिशात्मक मीटर लगाता है।", is_hi)}</div></div>
-          <div class="step-item"><div class="step-num">5</div><div class="step-title">{tr("Subsidy via DBT", "DBT द्वारा सब्सिडी", is_hi)}</div><div class="step-desc">{tr("Subsidy is credited directly to your bank account.", "सब्सिडी सीधे आपके बैंक खाते में जमा की जाती है।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">1</div><div class="step-title">{tr("Portal registration", "पोर्टल पंजीकरण", is_hi)}</div><div class="step-desc">{tr("Apply on pmsuryaghar.gov.in or pmkusum.mnre.gov.in.", "pmsuryaghar.gov.in या pmkusum.mnre.gov.in पर आवेदन करें।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">2</div><div class="step-title">{tr("DISCOM / SNA approval", "DISCOM / एजेंसी स्वीकृति", is_hi)}</div><div class="step-desc">{tr("Technical feasibility & beneficiary work order.", "तकनीकी व्यवहार्यता और लाभार्थी कार्य आदेश।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">3</div><div class="step-title">{tr("Vendor installation", "वेंडर द्वारा स्थापना", is_hi)}</div><div class="step-desc">{tr("Install ALMM/DCR hardware via empanelled vendor.", "पंजीकृत वेंडर से ALMM/DCR उपकरण लगवाएं।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">4</div><div class="step-title">{tr("Joint inspection", "संयुक्त निरीक्षण", is_hi)}</div><div class="step-desc">{tr("Site verification & net-meter / RMS commissioning.", "साइट सत्यापन और नेट-मीटर / RMS चालू करना।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">5</div><div class="step-title">{tr("Subsidy release", "सब्सिडी भुगतान", is_hi)}</div><div class="step-desc">{tr("Central + State subsidy settled directly.", "केंद्र और राज्य सब्सिडी का सीधा निपटान।", is_hi)}</div></div>
         </div>
         """
     )
@@ -437,7 +493,7 @@ with tab1:
                 tok_limit = 450
 
             usr_p = (
-                f"Audit this {'rooftop solar' if is_rooftop else 'PM-KUSUM pump'} configuration in {state} "
+                f"Audit this {'rooftop solar' if is_rooftop else res['scheme_code']} configuration in {state} "
                 f"(Utility: {st_info['discom']}, Regulator: {st_info['regulator']}). "
                 f"Size: {res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}, "
                 f"Quote: ₹{res['quote']:,} ({res['verdict']}). "
@@ -552,13 +608,13 @@ with tab2:
     with pin_col:
         user_pin = st.text_input(
             tr("Enter Your PIN Code (Optional)", "अपना पिन कोड दर्ज करें (वैकल्पिक)", is_hi),
-            value="127028" if is_preset_home else "",
+            value="127028" if (is_preset_home or is_preset_grid_farm) else "",
             max_chars=6,
             key="user_pincode_input",
         )
 
     vendors, area_label = get_local_installers(state, user_pin)
-    for idx, v in enumerate(vendors):
+    for v in vendors:
         badge_bg = "#FEF3C7" if v["tier"] == "Sponsored Partner" else "#E0F2FE"
         badge_fg = "#92400E" if v["tier"] == "Sponsored Partner" else "#075985"
         H(
@@ -658,8 +714,8 @@ with tab3:
         f"💰 **{tr('25-Year Net Profit:', '25-वर्षीय शुद्ध लाभ:', is_hi)}** "
         f"₹{res['net_25yr']:,} ({_fmt_lakh(res['net_25yr'], is_hi)}) · "
         + tr(
-            f"Gross savings ₹{res['total_gross']:,} minus ₹{res['net']:,} net investment",
-            f"कुल बचत ₹{res['total_gross']:,} घटाव ₹{res['net']:,} शुद्ध निवेश",
+            f"Net operational savings ₹{res['total_gross']:,} minus ₹{res['net']:,} net investment (after annual O&M & degradation)",
+            f"शुद्ध संचालन बचत ₹{res['total_gross']:,} घटाव ₹{res['net']:,} शुद्ध निवेश (वार्षिक रखरखाव सहित)",
             is_hi,
         )
     )
