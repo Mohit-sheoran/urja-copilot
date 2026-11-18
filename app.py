@@ -405,7 +405,7 @@ with tab1:
     with v_col1:
         vendor_name = st.text_input(
             tr("Installer Company Name", "इंस्टॉलर कंपनी का नाम", is_hi),
-            value="Waaree" if (is_preset_home or is_any_farm_preset) else "",
+            value="Waaree" if p_key != "custom" else "",
             placeholder=tr("e.g. Tata Power Solar, Loom Solar, Waaree, Vikram Solar", "जैसे: Tata Power Solar, Loom Solar, Waaree", is_hi),
             key="vendor_input",
         )
@@ -676,7 +676,7 @@ with tab2:
     with pin_col:
         user_pin = st.text_input(
             tr("Enter Your PIN Code (Optional)", "अपना पिन कोड दर्ज करें (वैकल्पिक)", is_hi),
-            value="127028" if (is_preset_home or is_preset_grid_farm) else "",
+            value="127028" if is_preset_home else "",
             max_chars=6,
             key="user_pincode_input",
         )
