@@ -327,6 +327,17 @@ with tab1:
         )
 
     st.subheader(f"✨ {tr('AI Engineering & Quote Insights', 'AI इंजीनियरिंग और कोटेशन विश्लेषण', is_hi)}")
+    detail_mode = st.radio(
+        tr("Report Depth", "रिपोर्ट का स्तर", is_hi),
+        [
+            tr("⚡ Concise (4 Key Bullets)", "⚡ संक्षिप्त (4 मुख्य बिंदु)", is_hi),
+            tr("📋 Detailed Customer Audit (Actionable)", "📋 विस्तृत ग्राहक ऑडिट (संपूर्ण विवरण)", is_hi),
+        ],
+        horizontal=True,
+        key="audit_depth_opt",
+    )
+    is_detailed = "Detailed" in detail_mode or "विस्तृत" in detail_mode
+
     if st.button(f"🚀 {tr('Generate AI Insights & OCR Audit', 'AI विश्लेषण और OCR ऑडिट चलाएँ', is_hi)}"):
         should_skip = smart_skip and uploaded_img is None and res["verdict"] in ("NO_QUOTE", "FAIR")
         if demo_mode or should_skip:
@@ -346,16 +357,39 @@ with tab1:
             st.warning(tr("Add `GEMINI_API_KEY` in Streamlit Secrets to run AI analysis.", "AI विश्लेषण चलाने के लिए Streamlit Secrets में `GEMINI_API_KEY` जोड़ें।", is_hi))
         else:
             img_part = prepare_image(uploaded_img)
-            sys_p = (
-                f"You are a senior Indian solar regulatory engineer. Respond strictly in {'Hindi (Devanagari)' if is_hi else 'English'} using 4 crisp bullet points. "
-                f"Never alter the pre-computed numbers: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net ₹{res['net']:,}."
+            lang_rule = "Hindi (Devanagari)" if is_hi else "English"
+            strict_grounding = (
+                f"You are an Indian solar regulatory & electrical engineer advising a real customer in {state}. "
+                f"Respond strictly in {lang_rule}. "
+                f"STRICT ACCURACY RULES: "
+                f"1. Rely ONLY on verified MNRE PM Surya Ghar / PM-KUSUM rules, BIS/ALMM standards, and the exact inputs provided below. "
+                f"2. NEVER invent bank loan interest rates, unverified state subsidies, or vendor names. If a local utility rule varies by circle, explicitly advise verifying on pmsuryaghar.gov.in or {st_info['discom']}. "
+                f"3. Preserve these exact numbers verbatim: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net Cost ₹{res['net']:,}. "
             )
+
+            if is_detailed:
+                sys_p = strict_grounding + (
+                    "Format as a clear, practical customer guide using 4 structured bulleted sections: "
+                    "(1) DISCOM & Sanctioned Load Action, (2) Mandatory ALMM/DCR & BIS Hardware Verification, "
+                    "(3) Earthing, Surge & Structure Safety Specs, and (4) Payment Milestone & Subsidy Disbursement Safeguards."
+                )
+                tok_limit = 850
+            else:
+                sys_p = strict_grounding + "Respond using strictly 4 concise, high-signal bullet points with no extra headings."
+                tok_limit = 450
+
             usr_p = (
-                f"Audit this {'rooftop solar' if is_rooftop else 'PM-KUSUM pump'} setup in {state} ({st_info['discom']}). "
+                f"Audit this {'rooftop solar' if is_rooftop else 'PM-KUSUM pump'} configuration in {state} "
+                f"(Utility: {st_info['discom']}, Regulator: {st_info['regulator']}). "
+                f"Size: {res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}, "
                 f"Quote: ₹{res['quote']:,} ({res['verdict']}). "
-                + ("Extract line items from the uploaded quote image and check for non-DCR or missing earthing risks." if img_part else "Give top 4 technical & subsidy compliance checks.")
+                + (
+                    "Carefully inspect the uploaded quote/bill image: list visible prices or equipment specs, compare against the ₹{:,} benchmark, and flag any missing DCR/ALMM or earthing items.".format(res["bench"])
+                    if img_part
+                    else "Give practical, legally accurate verification steps the customer must check before signing a vendor agreement."
+                )
             )
-            txt, metrics = run_llm(api_key, engine_choice, sys_p, usr_p, image_part=img_part, max_tokens=450, stream=True)
+            txt, metrics = run_llm(api_key, engine_choice, sys_p, usr_p, image_part=img_part, max_tokens=tok_limit, stream=True)
             if metrics:
                 _render_eff(metrics)
 
