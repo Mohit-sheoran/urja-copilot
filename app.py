@@ -141,7 +141,7 @@ with st.sidebar:
     with st.expander(f"🧠 {tr('AI engine & efficiency', 'AI इंजन और दक्षता', is_hi)}", expanded=False):
         demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False, key="demo_mode_opt")
         smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False, key="smart_skip_opt")
-        model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"])
+        model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"])
         engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)
 
 # ---------------------------------------------------------
@@ -440,7 +440,6 @@ with tab1:
 with tab2:
     st.subheader(f"📈 {tr('25-Year Cumulative Cashflow Projection', '25-वर्षीय संचयी नकदी प्रवाह अनुमान', is_hi)}")
 
-    # Build Indian Lakh axis ticks dynamically
     y_min = min(res["cum"])
     y_max = max(res["cum"])
     span = max(100000, y_max - y_min)
@@ -567,7 +566,15 @@ with tab4:
                     f"You are UrjaMitra, an expert Indian solar, agricultural land (Khasra/Khatauni), and DISCOM policy copilot for {state} ({st_info['discom']}). "
                     f"Answer clearly and concisely in {'Hindi (Devanagari)' if is_hi else 'English'}."
                 )
-                ans, q_metrics = run_llm(api_key, engine_choice, sys_qa, user_q, max_tokens=450, stream=False)
+                ans, q_metrics = run_llm(
+                    api_key,
+                    engine_choice,
+                    sys_qa,
+                    user_q,
+                    max_tokens=450,
+                    stream=False,
+                    render_inline=True,
+                )
                 if q_metrics:
                     _render_eff(q_metrics)
             if ans:
