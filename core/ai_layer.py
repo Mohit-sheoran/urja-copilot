@@ -1,4 +1,4 @@
-"""Google Gemini AI client, model fallback discovery, OCR downscaling & fast timeout."""
+"""Google Gemini AI client, fast model routing, OCR downscaling & timeout."""
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 import io
@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 from core.config import AUTO, CFG
 
-_BLOCK = ("tts", "image", "audio", "robotics", "computer-use", "customtools", "001")
+_BLOCK = ("tts", "image", "audio", "robotics", "computer-use", "customtools", "001", "3.6", "3.7")
 
 
 def get_api_key() -> str:
@@ -28,16 +28,18 @@ def get_client(api_key: str):
     return genai.Client(api_key=api_key)
 
 
-def _version_key(name: str):
+def _speed_priority_key(name: str):
+    """Prioritize low-latency Flash-Lite models first so Auto mode responds in ~1-2s."""
     m = re.search(r"gemini-(\d+)(?:\.(\d+))?", name)
     major = int(m.group(1)) if m else 0
     minor = int(m.group(2) or 0) if m else 0
-    return (major, minor, "lite" in name, "latest" in name)
+    is_lite = 1 if "lite" in name else 0
+    return (is_lite, major, minor)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def list_models(api_key: str):
-    """Discover free-tier Flash models and skip retired 3.7 endpoints."""
+    """Discover active free-tier Flash models, prioritizing fast Flash-Lite endpoints."""
     try:
         names = []
         for m in get_client(api_key).models.list():
@@ -47,14 +49,13 @@ def list_models(api_key: str):
                 "generateContent" in acts
                 and name.startswith("gemini")
                 and "flash" in name
-                and "3.7" not in name
                 and not any(b in name for b in _BLOCK)
             ):
                 names.append(name)
-        names = sorted(set(names), key=_version_key, reverse=True)
-        return names or ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+        names = sorted(set(names), key=_speed_priority_key, reverse=True)
+        return names or ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash"]
     except Exception:
-        return ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+        return ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash"]
 
 
 def prepare_image(uploaded_file, max_px: int = 1024):
@@ -79,11 +80,11 @@ def prepare_image(uploaded_file, max_px: int = 1024):
 def friendly_error(err: Exception) -> str:
     s = str(err)
     if isinstance(err, FuturesTimeout) or "Timeout" in s:
-        return "Gemini servers took too long to respond (>12s). Try selecting 'gemini-3.1-flash-lite' in the sidebar."
+        return "Gemini servers took too long to respond (>5s). Please retry."
     if "429" in s or "RESOURCE_EXHAUSTED" in s:
-        return "Free-tier rate limit reached (RPM/RPD). Wait ~30 seconds or switch to 'gemini-3.1-flash-lite'."
+        return "Free-tier rate limit reached (RPM/RPD). Wait ~20 seconds and retry."
     if "404" in s or "NOT_FOUND" in s:
-        return "Selected model endpoint retired. Switch to 'Auto' or 'gemini-3.1-flash-lite'."
+        return "Selected model endpoint retired. Switch to 'Auto' or 'gemini-3.5-flash-lite'."
     if "503" in s or "UNAVAILABLE" in s:
         return "Gemini servers are temporarily busy. Retry in a few seconds."
     if "401" in s or "403" in s or "API_KEY" in s:
@@ -104,8 +105,8 @@ def _gen_config(system_prompt: str, max_tokens: int) -> types.GenerateContentCon
     return types.GenerateContentConfig(**cfg)
 
 
-def _call_with_timeout(client, model_name: str, contents, cfg, timeout_sec: int = 12):
-    """Execute Gemini call with a hard timeout so stalled endpoints fail fast."""
+def _call_with_timeout(client, model_name: str, contents, cfg, timeout_sec: int = 5):
+    """Execute Gemini call with a snappy 5s timeout so busy endpoints fail fast."""
     executor = ThreadPoolExecutor(max_workers=1)
     future = executor.submit(
         client.models.generate_content,
@@ -127,8 +128,9 @@ def run_llm(
     image_part=None,
     max_tokens: int = 500,
     stream: bool = True,
+    render_inline: bool = True,
 ):
-    """Fetch Gemini response with 12s per-model timeout and automatic fallback."""
+    """Fetch Gemini response with 5s per-model timeout and automatic fallback."""
     found = list_models(api_key)
     if engine_choice != AUTO:
         models = [engine_choice] + [m for m in found if m != engine_choice][:3]
@@ -146,56 +148,13 @@ def run_llm(
         try:
             prefix = "Retrying with" if idx else "Contacting"
             status.info(f"⏳ {prefix} `{model_name}` ...")
-            resp = _call_with_timeout(client, model_name, contents, cfg, timeout_sec=12)
+            resp = _call_with_timeout(client, model_name, contents, cfg, timeout_sec=5)
             status.empty()
             text = (resp.text or "").strip()
-            st.markdown(text)
+            if render_inline:
+                st.markdown(text)
 
             total = time.perf_counter() - t0
             usage = getattr(resp, "usage_metadata", None)
             in_tok = getattr(usage, "prompt_token_count", 0) or 0
-            out_tok = getattr(usage, "candidates_token_count", 0) or 0
-            tot_tok = getattr(usage, "total_token_count", 0) or (in_tok + out_tok)
-            saved = max(0, round((1 - tot_tok / CFG["baseline_tokens"]) * 100)) if tot_tok else 0
-            return text, {
-                "model": model_name,
-                "ttft": round(total, 2),
-                "total": round(total, 2),
-                "in_tok": in_tok,
-                "out_tok": out_tok,
-                "tot_tok": tot_tok,
-                "saved_pct": saved,
-            }
-        except Exception as e:
-            status.empty()
-            last_err = e
-
-    st.error(f"❌ {friendly_error(last_err)}")
-    return None, None
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def polish_letter(api_key: str, engine_choice: str, draft: str, lang: str) -> str:
-    """Polishes formal DISCOM / State agency application letter."""
-    sys_p = (
-        f"You are an Indian regulatory correspondence editor. Rewrite the letter in crisp formal "
-        f"{'Hindi (Devanagari)' if lang == 'Hindi' else 'English'}. "
-        f"Preserve EVERY number, kW, HP, ₹ amount, state, agency and applicant name verbatim. "
-        f"Output ONLY the letter text with no commentary."
-    )
-    found = list_models(api_key)
-    models = (
-        [engine_choice] + [m for m in found if m != engine_choice][:3]
-        if engine_choice != AUTO
-        else found[:4]
-    )
-    cfg = _gen_config(sys_p, 650)
-    client = get_client(api_key)
-    for m in models:
-        try:
-            r = _call_with_timeout(client, m, draft, cfg, timeout_sec=12)
-            if r.text:
-                return r.text.strip()
-        except Exception:
-            continue
-    return draft
+            out_tok = getattr(usage, "candidates_token_count", 0)
