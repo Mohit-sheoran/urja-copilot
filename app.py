@@ -64,12 +64,13 @@ def _render_eff(m: dict):
 # ---------------------------------------------------------
 # 1. Top Language Toggle & Hero Banner
 # ---------------------------------------------------------
-_, lang_col = st.columns([4.5, 1])
+_, lang_col = st.columns([3.8, 1.3])
 with lang_col:
-    lang = st.selectbox(
+    lang = st.radio(
         "Language",
         ["English", "Hindi"],
-        format_func=lambda x: "English" if x == "English" else "हिंदी (Hindi)",
+        format_func=lambda x: "English" if x == "English" else "हिंदी",
+        horizontal=True,
         label_visibility="collapsed",
     )
 is_hi = lang == "Hindi"
@@ -138,8 +139,8 @@ with st.sidebar:
     )
 
     with st.expander(f"🧠 {tr('AI engine & efficiency', 'AI इंजन और दक्षता', is_hi)}", expanded=False):
-        demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False)
-        smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False)
+        demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False, key="demo_mode_opt")
+        smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False, key="smart_skip_opt")
         model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"])
         engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)
 
