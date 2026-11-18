@@ -137,7 +137,7 @@ def run_llm(
     else:
         models = found[:2]
 
-    timeout_sec = 20 if (image_part is not None or max_tokens > 500) else 8
+    timeout_sec = 35 if (image_part is not None or max_tokens > 500) else 8
     contents = [image_part, user_prompt] if image_part is not None else user_prompt
     cfg = _gen_config(system_prompt, max_tokens)
     client = get_client(api_key)
