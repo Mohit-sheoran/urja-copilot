@@ -640,7 +640,7 @@ with tab2:
         )
     )
 
-   r_col1, r_col2 = st.columns([1, 1])
+    r_col1, r_col2 = st.columns([1, 1])
     with r_col1:
         roof_photo = st.file_uploader(
             tr("Upload Rooftop Photo (JPG/PNG)", "छत की फोटो अपलोड करें", is_hi),
