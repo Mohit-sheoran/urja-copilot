@@ -37,25 +37,70 @@ PIN_PREFIX_STATE = {
 }
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def _lookup_pincode_area(pin: str):
+    """Resolve Indian 6-digit PIN code to (locality_label, state_name) via India Post API."""
+    if len(pin) != 6 or not pin.isdigit():
+        return None
+    try:
+        resp = requests.get(f"https://api.postalpincode.in/pincode/{pin}", timeout=2.5)
+        resp.raise_for_status()
+        payload = resp.json()
+        if isinstance(payload, list) and payload and payload[0].get("Status") == "Success":
+            offices = payload[0].get("PostOffice") or []
+            if offices:
+                po = offices[0]
+                block = (po.get("Block") or "").strip()
+                district = (po.get("District") or "").strip()
+                po_state = (po.get("State") or "").strip()
+                parts = []
+                if block and block.upper() != "NA" and block.lower() != district.lower():
+                    parts.append(block)
+                if district and district.upper() != "NA":
+                    parts.append(district)
+                if po_state:
+                    parts.append(po_state)
+                if parts:
+                    return ", ".join(parts), (po_state or district)
+    except Exception:
+        pass
+    return None
+
+
 def get_local_installers(state: str, pincode: str = ""):
-    """Return clearly labeled sample installer listings matched to PIN prefix or selected state."""
+    """Return clearly labeled sample installer listings matched to PIN locality or selected state."""
     pin = pincode.strip()
-    resolved_state = PIN_PREFIX_STATE.get(pin[:2], state) if len(pin) >= 2 and pin[:2].isdigit() else state
-    area_tag = f"PIN {pin} ({resolved_state})" if pin else resolved_state
+    resolved_area = state
+    circle_label = state
+
+    if len(pin) == 6 and pin.isdigit():
+        looked_up = _lookup_pincode_area(pin)
+        if looked_up:
+            locality_str, po_state = looked_up
+            resolved_area = f"PIN {pin} ({locality_str})"
+            circle_label = locality_str
+        else:
+            fallback_state = PIN_PREFIX_STATE.get(pin[:2], state)
+            resolved_area = f"PIN {pin} ({fallback_state})"
+            circle_label = fallback_state
+    elif len(pin) >= 2 and pin[:2].isdigit():
+        fallback_state = PIN_PREFIX_STATE.get(pin[:2], state)
+        resolved_area = f"PIN {pin} ({fallback_state})"
+        circle_label = fallback_state
 
     vendors = [
         {
-            "name": f"Sample Solar EPC A — {resolved_state} Circle",
+            "name": f"Sample Solar EPC A — {circle_label}",
             "tier": "Sponsored (sample)",
             "specialty": "PM Surya Ghar Rooftop & Net-Metering",
         },
         {
-            "name": f"Sample Agri-Solar Works B — {resolved_state} Circle",
+            "name": f"Sample Agri-Solar Works B — {circle_label}",
             "tier": "Empanelled (sample)",
             "specialty": "PM-KUSUM Solar Pumps & ALMM/DCR Kits",
         },
     ]
-    return vendors, area_tag
+    return vendors, resolved_area
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
