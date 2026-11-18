@@ -676,7 +676,7 @@ with tab2:
     with pin_col:
         user_pin = st.text_input(
             tr("Enter Your PIN Code (Optional)", "अपना पिन कोड दर्ज करें (वैकल्पिक)", is_hi),
-            value="127028" if is_preset_home else "",
+            value="",
             max_chars=6,
             key="user_pincode_input",
         )
