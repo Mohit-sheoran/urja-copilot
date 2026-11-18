@@ -250,10 +250,24 @@ with tab1:
 
     if verify_clicked and vendor_name.strip():
         if not crustdata_token:
-            st.info(tr("ℹ️ Add `CRUSTDATA_API_TOKEN` in Streamlit Secrets to enable live B2B vendor screening.", "ℹ️ लाइव B2B वेंडर जांच के लिए Streamlit Secrets में `CRUSTDATA_API_TOKEN` जोड़ें।", is_hi))
+            st.session_state["vendor_audit_state"] = {"status": "no_token"}
         else:
             with st.spinner(tr("Querying Crustdata corporate registry...", "Crustdata कॉर्पोरेट रजिस्ट्री की जांच हो रही है...", is_hi)):
                 v_res = verify_epc_vendor(vendor_name, crustdata_token)
+            st.session_state["vendor_audit_state"] = {
+                "status": "done",
+                "query": vendor_name.strip(),
+                "res": v_res,
+            }
+
+    # Render saved Vendor Audit result persistently across reruns
+    v_state = st.session_state.get("vendor_audit_state")
+    if v_state:
+        if v_state["status"] == "no_token":
+            st.info(tr("ℹ️ Add `CRUSTDATA_API_TOKEN` in Streamlit Secrets to enable live B2B vendor screening.", "ℹ️ लाइव B2B वेंडर जांच के लिए Streamlit Secrets में `CRUSTDATA_API_TOKEN` जोड़ें।", is_hi))
+        elif v_state["status"] == "done":
+            v_res = v_state["res"]
+            q_name = v_state["query"]
             if v_res and v_res.get("found"):
                 H(
                     f"""
@@ -272,8 +286,8 @@ with tab1:
             else:
                 st.warning(
                     tr(
-                        f"⚠️ **Unverified / Local Contractor Alert:** No institutional B2B footprint found for `{vendor_name}` on Crustdata. Ensure your contract mandates milestone-based payments (withhold 20% until DISCOM commissioning and joint inspection).",
-                        f"⚠️ **असत्यापित / स्थानीय ठेकेदार चेतावनी:** `{vendor_name}` का संस्थागत B2B रिकॉर्ड Crustdata पर नहीं मिला। अनुबंध में चरणबद्ध भुगतान सुनिश्चित करें (DISCOM कमीशनिंग तक 20% राशि रोक कर रखें)।",
+                        f"⚠️ **Unverified / Local Contractor Alert:** No institutional B2B footprint found for `{q_name}` on Crustdata. Ensure your contract mandates milestone-based payments (withhold 20% until DISCOM commissioning and joint inspection).",
+                        f"⚠️ **असत्यापित / स्थानीय ठेकेदार चेतावनी:** `{q_name}` का संस्थागत B2B रिकॉर्ड Crustdata पर नहीं मिला। अनुबंध में चरणबद्ध भुगतान सुनिश्चित करें (DISCOM कमीशनिंग तक 20% राशि रोक कर रखें)।",
                         is_hi,
                     )
                 )
@@ -338,7 +352,7 @@ with tab1:
     )
     is_detailed = "Detailed" in detail_mode or "विस्तृत" in detail_mode
 
-    if st.button(f"🚀 {tr('Generate AI Insights & OCR Audit', 'AI विश्लेषण और OCR ऑडिट चलाएँ', is_hi)}"):
+    if st.button(f"🚀 {tr('Generate AI Insights & OCR Audit', 'AI विश्लेषण और OCR ऑडिट चलाएँ', is_hi)}", key="run_ai_btn"):
         should_skip = smart_skip and uploaded_img is None and res["verdict"] in ("NO_QUOTE", "FAIR")
         if demo_mode or should_skip:
             reason = (
@@ -346,15 +360,19 @@ with tab1:
                 if demo_mode
                 else tr("Smart-skip saved tokens (no quote anomaly or image uploaded)", "स्मार्ट-स्किप ने टोकन बचाए (कोई असामान्य कीमत या फोटो नहीं है)", is_hi)
             )
-            st.success(
-                tr(
+            st.session_state["ai_audit_state"] = {
+                "type": "skip",
+                "msg": tr(
                     f"⚡ **{reason}:** System sizing ({res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}), ₹{res['sub']:,} subsidy, and {res['payback']}-yr payback are already verified deterministically.",
                     f"⚡ **{reason}:** सिस्टम क्षमता ({res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}), ₹{res['sub']:,} सब्सिडी, और {res['payback']}-वर्षीय पेबैक पहले ही सटीक रूप से सत्यापित हैं।",
                     is_hi,
-                )
-            )
+                ),
+            }
         elif not api_key:
-            st.warning(tr("Add `GEMINI_API_KEY` in Streamlit Secrets to run AI analysis.", "AI विश्लेषण चलाने के लिए Streamlit Secrets में `GEMINI_API_KEY` जोड़ें।", is_hi))
+            st.session_state["ai_audit_state"] = {
+                "type": "warn",
+                "msg": tr("Add `GEMINI_API_KEY` in Streamlit Secrets to run AI analysis.", "AI विश्लेषण चलाने के लिए Streamlit Secrets में `GEMINI_API_KEY` जोड़ें।", is_hi),
+            }
         else:
             img_part = prepare_image(uploaded_img)
             lang_rule = "Hindi (Devanagari)" if is_hi else "English"
@@ -389,9 +407,34 @@ with tab1:
                     else "Give practical, legally accurate verification steps the customer must check before signing a vendor agreement."
                 )
             )
-            txt, metrics = run_llm(api_key, engine_choice, sys_p, usr_p, image_part=img_part, max_tokens=tok_limit, stream=True)
-            if metrics:
-                _render_eff(metrics)
+            txt, metrics = run_llm(
+                api_key,
+                engine_choice,
+                sys_p,
+                usr_p,
+                image_part=img_part,
+                max_tokens=tok_limit,
+                stream=False,
+                render_inline=False,
+            )
+            if txt:
+                st.session_state["ai_audit_state"] = {
+                    "type": "ai",
+                    "text": txt,
+                    "metrics": metrics,
+                }
+
+    # Render saved AI Insights result persistently across reruns
+    ai_state = st.session_state.get("ai_audit_state")
+    if ai_state:
+        if ai_state["type"] == "skip":
+            st.success(ai_state["msg"])
+        elif ai_state["type"] == "warn":
+            st.warning(ai_state["msg"])
+        elif ai_state["type"] == "ai":
+            st.markdown(ai_state["text"])
+            if ai_state.get("metrics"):
+                _render_eff(ai_state["metrics"])
 
 # --- TAB 2: 25-Year ROI & Bill of Materials ---
 with tab2:
