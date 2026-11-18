@@ -296,7 +296,7 @@ else:
     st.info(f"🌾 **{tr('Regional Irrigation Economics:', 'क्षेत्रीय सिंचाई अर्थशास्त्र:', is_hi)}** {res['economics_note']}")
     if res.get("cap_note"):
         st.caption(f"ℹ️ {res['cap_note']}")
-   if res["depth_ft"] > 300:
+    if res["depth_ft"] > 300:
         st.warning(
             tr(
                 f"⚠️ **Deep Borewell ({res['depth_ft']} ft / {res['head_m']}m head):** Requires a high-head multi-stage submersible pump (12–16 stages) and heavy-duty riser pipe; standard low-head pumps will fail to lift water.",
