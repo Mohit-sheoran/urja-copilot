@@ -80,7 +80,7 @@ def prepare_image(uploaded_file, max_px: int = 1024):
 def friendly_error(err: Exception) -> str:
     s = str(err)
     if isinstance(err, FuturesTimeout) or "Timeout" in s:
-        return "Gemini servers took too long to respond (>5s). Please retry."
+        return "Gemini servers timed out before completing the response. Please retry."
     if "429" in s or "RESOURCE_EXHAUSTED" in s:
         return "Free-tier rate limit reached (RPM/RPD). Wait ~20 seconds and retry."
     if "404" in s or "NOT_FOUND" in s:
@@ -130,16 +130,14 @@ def run_llm(
     stream: bool = True,
     render_inline: bool = True,
 ):
-    """Fetch Gemini response with fast timeout, stable model routing & 503 auto-retry."""
+    """Fetch Gemini response (max 2 models; no retry on 429/auth; dynamic timeout)."""
     found = list_models(api_key)
     if engine_choice != AUTO:
-        base_models = [engine_choice] + [m for m in found if m != engine_choice][:2]
+        models = ([engine_choice] + [m for m in found if m != engine_choice])[:2]
     else:
-        base_models = found[:3]
+        models = found[:2]
 
-    # Retry the fastest model once after a brief backoff if all endpoints return 503
-    models = base_models + [base_models[0]]
-
+    timeout_sec = 20 if (image_part is not None or max_tokens > 500) else 8
     contents = [image_part, user_prompt] if image_part is not None else user_prompt
     cfg = _gen_config(system_prompt, max_tokens)
     client = get_client(api_key)
@@ -149,14 +147,9 @@ def run_llm(
         status = st.empty()
         t0 = time.perf_counter()
         try:
-            if idx == len(base_models):
-                status.info(f"⏳ Servers busy — retrying `{model_name}` ...")
-                time.sleep(1.2)
-            else:
-                prefix = "Retrying with" if idx else "Contacting"
-                status.info(f"⏳ {prefix} `{model_name}` ...")
-
-            resp = _call_with_timeout(client, model_name, contents, cfg, timeout_sec=7)
+            prefix = "Retrying with" if idx else "Contacting"
+            status.info(f"⏳ {prefix} `{model_name}` ...")
+            resp = _call_with_timeout(client, model_name, contents, cfg, timeout_sec=timeout_sec)
             status.empty()
             text = (resp.text or "").strip()
             if render_inline:
@@ -170,8 +163,7 @@ def run_llm(
             saved = max(0, round((1 - tot_tok / CFG["baseline_tokens"]) * 100)) if tot_tok else 0
             return text, {
                 "model": model_name,
-                "ttft": round(total, 2),
-                "total": round(total, 2),
+                "latency": round(total, 2),
                 "in_tok": in_tok,
                 "out_tok": out_tok,
                 "tot_tok": tot_tok,
@@ -180,14 +172,18 @@ def run_llm(
         except Exception as e:
             status.empty()
             last_err = e
+            err_s = str(e)
+            # Do not burn quota or waste time retrying on rate-limit or auth failures
+            if any(code in err_s for code in ("429", "RESOURCE_EXHAUSTED", "401", "403", "API_KEY")):
+                break
 
     st.error(f"❌ {friendly_error(last_err)}")
     return None, None
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def polish_letter(api_key: str, engine_choice: str, draft: str, lang: str) -> str:
-    """Polishes formal DISCOM / State agency application letter."""
+def polish_letter(api_key: str, engine_choice: str, draft: str, lang: str) -> tuple[str, bool]:
+    """Polishes formal DISCOM / State agency application letter. Returns (text, ok)."""
     sys_p = (
         f"You are an Indian regulatory correspondence editor. Rewrite the letter in crisp formal "
         f"{'Hindi (Devanagari)' if lang == 'Hindi' else 'English'}. "
@@ -196,17 +192,18 @@ def polish_letter(api_key: str, engine_choice: str, draft: str, lang: str) -> st
     )
     found = list_models(api_key)
     models = (
-        [engine_choice] + [m for m in found if m != engine_choice][:3]
+        ([engine_choice] + [m for m in found if m != engine_choice])[:2]
         if engine_choice != AUTO
-        else found[:4]
+        else found[:2]
     )
     cfg = _gen_config(sys_p, 650)
     client = get_client(api_key)
     for m in models:
         try:
-            r = _call_with_timeout(client, m, draft, cfg, timeout_sec=6)
+            r = _call_with_timeout(client, m, draft, cfg, timeout_sec=15)
             if r.text:
-                return r.text.strip()
-        except Exception:
-            continue
-    return draft
+                return r.text.strip(), True
+        except Exception as e:
+            if any(code in str(e) for code in ("429", "RESOURCE_EXHAUSTED", "401", "403", "API_KEY")):
+                break
+    return draft, False
