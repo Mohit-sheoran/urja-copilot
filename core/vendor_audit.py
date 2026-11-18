@@ -3,56 +3,58 @@
 import requests
 import streamlit as st
 
-SAMPLE_DIRECTORY = {
-    "Haryana": [
-        {
-            "name": "Sample Solar EPC A (Hisar / Bhiwani)",
-            "tier": "Sponsored (sample)",
-            "specialty": "PM Surya Ghar & DHBVN Net-Metering",
-        },
-        {
-            "name": "Sample Solar EPC B (Gurugram)",
-            "tier": "Empanelled (sample)",
-            "specialty": "Residential Rooftop & Hybrid Inverters",
-        },
-        {
-            "name": "Sample Agri-Solar Works C (Rohtak)",
-            "tier": "Empanelled (sample)",
-            "specialty": "PM-KUSUM Component-B Submersible Pumps",
-        },
-    ],
-    "Rajasthan": [
-        {
-            "name": "Sample AgriTech Solar A (Jaipur / Sikar)",
-            "tier": "Sponsored (sample)",
-            "specialty": "PM-KUSUM 5–10 HP Pumps & Rooftop",
-        },
-        {
-            "name": "Sample Energy Systems B (Jodhpur)",
-            "tier": "Empanelled (sample)",
-            "specialty": "JVVNL / JdVVNL Net-Metered Rooftop",
-        },
-    ],
+PIN_PREFIX_STATE = {
+    "11": "Delhi",
+    "12": "Haryana", "13": "Haryana",
+    "14": "Punjab", "15": "Punjab", "16": "Punjab",
+    "17": "Hill / NE States (HP, UK, J&K, Assam)",
+    "18": "Hill / NE States (HP, UK, J&K, Assam)",
+    "19": "Hill / NE States (HP, UK, J&K, Assam)",
+    "20": "Uttar Pradesh", "21": "Uttar Pradesh", "22": "Uttar Pradesh",
+    "23": "Uttar Pradesh", "24": "Uttar Pradesh", "25": "Uttar Pradesh",
+    "26": "Uttar Pradesh", "27": "Uttar Pradesh", "28": "Uttar Pradesh",
+    "30": "Rajasthan", "31": "Rajasthan", "32": "Rajasthan",
+    "33": "Rajasthan", "34": "Rajasthan",
+    "36": "Gujarat", "37": "Gujarat", "38": "Gujarat", "39": "Gujarat",
+    "40": "Maharashtra", "41": "Maharashtra", "42": "Maharashtra",
+    "43": "Maharashtra", "44": "Maharashtra",
+    "45": "Madhya Pradesh", "46": "Madhya Pradesh",
+    "47": "Madhya Pradesh", "48": "Madhya Pradesh",
+    "49": "Chhattisgarh",
+    "50": "Telangana",
+    "51": "Andhra Pradesh", "52": "Andhra Pradesh", "53": "Andhra Pradesh",
+    "56": "Karnataka", "57": "Karnataka", "58": "Karnataka", "59": "Karnataka",
+    "60": "Tamil Nadu", "61": "Tamil Nadu", "62": "Tamil Nadu",
+    "63": "Tamil Nadu", "64": "Tamil Nadu", "65": "Tamil Nadu", "66": "Tamil Nadu",
+    "67": "Kerala", "68": "Kerala", "69": "Kerala",
+    "70": "West Bengal", "71": "West Bengal", "72": "West Bengal",
+    "73": "West Bengal", "74": "West Bengal",
+    "75": "Odisha", "76": "Odisha", "77": "Odisha",
+    "78": "Hill / NE States (HP, UK, J&K, Assam)",
+    "79": "Hill / NE States (HP, UK, J&K, Assam)",
+    "80": "Bihar", "81": "Bihar", "82": "Bihar", "83": "Jharkhand",
+    "84": "Bihar", "85": "Bihar",
 }
-
-DEFAULT_SAMPLE_INSTALLERS = [
-    {
-        "name": "Sample Regional Solar Partner A",
-        "tier": "Sponsored (sample)",
-        "specialty": "PM Surya Ghar & PM-KUSUM Turnkey EPC",
-    },
-    {
-        "name": "Sample State-Registered Vendor B",
-        "tier": "Empanelled (sample)",
-        "specialty": "ALMM/DCR Rooftop & Net-Metering",
-    },
-]
 
 
 def get_local_installers(state: str, pincode: str = ""):
-    """Return clearly labeled sample installer listings (demo only)."""
-    vendors = SAMPLE_DIRECTORY.get(state, DEFAULT_SAMPLE_INSTALLERS)
-    area_tag = f"PIN {pincode.strip()}" if pincode.strip() else state
+    """Return clearly labeled sample installer listings matched to PIN prefix or selected state."""
+    pin = pincode.strip()
+    resolved_state = PIN_PREFIX_STATE.get(pin[:2], state) if len(pin) >= 2 and pin[:2].isdigit() else state
+    area_tag = f"PIN {pin} ({resolved_state})" if pin else resolved_state
+
+    vendors = [
+        {
+            "name": f"Sample Solar EPC A — {resolved_state} Circle",
+            "tier": "Sponsored (sample)",
+            "specialty": "PM Surya Ghar Rooftop & Net-Metering",
+        },
+        {
+            "name": f"Sample Agri-Solar Works B — {resolved_state} Circle",
+            "tier": "Empanelled (sample)",
+            "specialty": "PM-KUSUM Solar Pumps & ALMM/DCR Kits",
+        },
+    ]
     return vendors, area_tag
 
 
