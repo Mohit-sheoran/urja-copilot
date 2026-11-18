@@ -404,7 +404,7 @@ with tab1:
     st.subheader(f"🏢 {tr('Installer & EPC Vendor Credibility Audit', 'सोलर वेंडर और EPC विश्वसनीयता ऑडिट', is_hi)}")
     st.caption(tr("Verify installer legitimacy and institutional footprint via Crustdata B2B intelligence.", "Crustdata B2B इंटेलिजेंस के माध्यम से इंस्टॉलर की वैधता जांचें।", is_hi))
 
-   preset_vendor_default = {
+    preset_vendor_default = {
         "home": "Tata Power Solar",
         "overpriced": "Shree Shyam Local Solar Works",
         "farmer": "Waaree",
