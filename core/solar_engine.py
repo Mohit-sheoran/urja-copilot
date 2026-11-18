@@ -16,7 +16,9 @@ def calc_subsidy(kw: float) -> int:
     return CFG["slabs"][3]
 
 
-def calc_rooftop(state: str, bill: float, roof_sqft: float, sanc_kw: float, quote: float) -> dict:
+def calc_rooftop(
+    state: str, bill: float, roof_sqft: float, sanc_kw: float, quote: float, is_hi: bool = False
+) -> dict:
     st_info = STATE_DB[state]
     tariff, insol = st_info["tariff"], st_info["insolation"]
 
@@ -27,12 +29,17 @@ def calc_rooftop(state: str, bill: float, roof_sqft: float, sanc_kw: float, quot
     rec_kw = max(1.0, round(min(needed_kw, roof_cap_kw) * 2) / 2)
 
     if sanc_kw > 0 and rec_kw > sanc_kw:
-        load_note = (
-            f"Recommended {rec_kw:g} kW exceeds your {sanc_kw:g} kW sanctioned load — "
-            f"apply for load enhancement alongside net-metering."
+        load_note = tr(
+            f"Recommended {rec_kw:g} kW exceeds your {sanc_kw:g} kW sanctioned load — apply for load enhancement alongside net-metering.",
+            f"अनुशंसित {rec_kw:g} kW आपके {sanc_kw:g} kW स्वीकृत लोड से अधिक है — नेट-मीटरिंग के साथ लोड बढ़ाने के लिए आवेदन करें।",
+            is_hi,
         )
     else:
-        load_note = f"Fits within your {sanc_kw:g} kW sanctioned load."
+        load_note = tr(
+            f"Fits within your {sanc_kw:g} kW sanctioned load.",
+            f"यह आपके {sanc_kw:g} kW स्वीकृत लोड के भीतर उपयुक्त है।",
+            is_hi,
+        )
 
     bench = round(rec_kw * CFG["cost_per_kw"])
     sub = calc_subsidy(rec_kw)
@@ -172,51 +179,87 @@ def build_bom(r: dict, is_hi: bool):
         return [
             (
                 tr("Solar PV Modules (DCR)", "सोलर पैनल (DCR)", is_hi),
-                f"{n_mod} × 540 Wp Mono-PERC Half-Cut (ALMM & DCR mandatory for subsidy)",
-                "25 yrs linear",
+                tr(
+                    f"{n_mod} × 540 Wp Mono-PERC Half-Cut (ALMM & DCR mandatory for subsidy)",
+                    f"{n_mod} × 540 Wp मोनो-PERC हाफ-कट (सब्सिडी हेतु ALMM और DCR अनिवार्य)",
+                    is_hi,
+                ),
+                tr("25 yrs linear", "25 वर्ष वारंटी", is_hi),
             ),
             (
                 tr("On-Grid String Inverter", "ऑन-ग्रिड इनवर्टर", is_hi),
-                f"{r['rec_kw']:g} kW IP65 MPPT Inverter (BIS IS-16221 / IEC-62109)",
-                "5–8 yrs",
+                tr(
+                    f"{r['rec_kw']:g} kW IP65 MPPT Inverter (BIS IS-16221 / IEC-62109)",
+                    f"{r['rec_kw']:g} kW IP65 MPPT इनवर्टर (BIS IS-16221 प्रमाणित)",
+                    is_hi,
+                ),
+                tr("5–8 yrs", "5–8 वर्ष", is_hi),
             ),
             (
                 tr("Mounting Structure", "माउंटिंग स्ट्रक्चर", is_hi),
-                f"Hot-Dip Galvanized Iron ≥80 µm, wind-rated 150 km/h (~{r['roof_req']} sq.ft)",
-                "15 yrs",
+                tr(
+                    f"Hot-Dip Galvanized Iron ≥80 µm, wind-rated 150 km/h (~{r['roof_req']} sq.ft)",
+                    f"हॉट-डिप गैल्वेनाइज्ड आयरन ≥80 µm, 150 km/h हवा प्रतिरोधी (~{r['roof_req']} वर्ग फुट)",
+                    is_hi,
+                ),
+                tr("15 yrs", "15 वर्ष", is_hi),
             ),
             (
                 tr("Protection & Earthing", "सुरक्षा एवं अर्थिंग", is_hi),
-                "DCDB + ACDB (Type-2 SPD, MCB), 3 Copper-Bonded Earthing Pits + LA",
-                "5 yrs",
+                tr(
+                    "DCDB + ACDB (Type-2 SPD, MCB), 3 Copper-Bonded Earthing Pits + LA",
+                    "DCDB + ACDB (टाइप-2 SPD, MCB), 3 कॉपर अर्थिंग पिट + तड़ित चालक",
+                    is_hi,
+                ),
+                tr("5 yrs", "5 वर्ष", is_hi),
             ),
             (
                 tr("Net Metering", "नेट मीटरिंग", is_hi),
-                f"Bi-directional Smart Meter approved by {r['st']['discom']}",
-                "Utility",
+                tr(
+                    f"Bi-directional Smart Meter approved by {r['st']['discom']}",
+                    f"{r['st']['discom']} द्वारा अनुमोदित द्वि-दिशात्मक स्मार्ट मीटर",
+                    is_hi,
+                ),
+                tr("Utility", "विद्युत विभाग", is_hi),
             ),
         ]
     n_mod = math.ceil((r["array_kwp"] * 1000) / 540)
     return [
         (
             tr("Solar PV Array (DCR)", "सोलर ऐरे (DCR)", is_hi),
-            f"{n_mod} × 540 Wp ({r['array_kwp']} kWp) DCR Poly/Mono-PERC Modules",
-            "25 yrs",
+            tr(
+                f"{n_mod} × 540 Wp ({r['array_kwp']} kWp) DCR Poly/Mono-PERC Modules",
+                f"{n_mod} × 540 Wp ({r['array_kwp']} kWp) DCR सोलर मॉड्यूल",
+                is_hi,
+            ),
+            tr("25 yrs", "25 वर्ष", is_hi),
         ),
         (
             tr("Submersible Pump-Set", "सबमर्सिबल पंप", is_hi),
-            f"{r['hp']:g} HP {r['pump_type']} Solar Submersible Pump (MNRE/BIS spec, {r['head_m']}m head)",
-            "5 yrs",
+            tr(
+                f"{r['hp']:g} HP {r['pump_type']} Solar Submersible Pump (MNRE/BIS spec, {r['head_m']}m head)",
+                f"{r['hp']:g} HP {r['pump_type']} सोलर सबमर्सिबल पंप (MNRE/BIS मानक, {r['head_m']}m हेड)",
+                is_hi,
+            ),
+            tr("5 yrs", "5 वर्ष", is_hi),
         ),
         (
             tr("Pump Controller / VFD", "पंप कंट्रोलर", is_hi),
-            f"{r['hp']:g} HP IP65 MPPT Solar Pump Controller with dry-run & surge protection",
-            "5 yrs",
+            tr(
+                f"{r['hp']:g} HP IP65 MPPT Solar Pump Controller with dry-run & surge protection",
+                f"{r['hp']:g} HP IP65 MPPT सोलर पंप कंट्रोलर (ड्राई-रन व सर्ज सुरक्षा सहित)",
+                is_hi,
+            ),
+            tr("5 yrs", "5 वर्ष", is_hi),
         ),
         (
             tr("Tracker / Fixed Structure", "माउंटिंग स्ट्रक्चर", is_hi),
-            "Hot-Dip GI Manual-Tracking / Dual-Axis Ground Structure (≥80 µm)",
-            "15 yrs",
+            tr(
+                "Hot-Dip GI Manual-Tracking / Dual-Axis Ground Structure (≥80 µm)",
+                "हॉट-डिप GI मैनुअल-ट्रैकिंग ग्राउंड स्ट्रक्चर (≥80 µm)",
+                is_hi,
+            ),
+            tr("15 yrs", "15 वर्ष", is_hi),
         ),
     ]
 
@@ -225,7 +268,7 @@ def build_letter(r: dict, name: str, cid: str, addr: str, is_hi: bool) -> str:
     st_info = r["st"]
     nm = name.strip() or ("[आवेदक का नाम]" if is_hi else "[Applicant Full Name]")
     ca = cid.strip() or ("[खाता / भू-अभिलेख संख्या]" if is_hi else "[Consumer Account / Land Khasra No.]")
-    ad = addr.strip() or f"[Village / City, {r['state']}]"
+    ad = addr.strip() or (f"[गाँव / शहर, {r['state']}]" if is_hi else f"[Village / City, {r['state']}]")
 
     if r["sector"] == "ROOFTOP":
         if is_hi:
