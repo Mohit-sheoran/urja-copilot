@@ -25,6 +25,7 @@ from core.ai_layer import (
 from core.vendor_audit import get_local_installers, verify_epc_vendor
 
 inject_css()
+H("<style>.block-container { padding-top: 1.35rem !important; }</style>")
 
 
 def _get_crustdata_token() -> str:
@@ -62,7 +63,7 @@ def _render_eff(m: dict):
 
 
 # ---------------------------------------------------------
-# 1. Top Language Toggle & Hero Banner
+# 1. Language Toggle & Synced Demo Preset State
 # ---------------------------------------------------------
 _, lang_col = st.columns([3.8, 1.3])
 with lang_col:
@@ -74,6 +75,164 @@ with lang_col:
         label_visibility="collapsed",
     )
 is_hi = lang == "Hindi"
+
+PRESET_KEYS = ["custom", "home", "overpriced", "farmer"]
+PRESET_LABELS = {
+    "custom": tr("Custom input", "कस्टम इनपुट", is_hi),
+    "home": tr("🏠 Haryana home", "🏠 हरियाणा घर", is_hi),
+    "overpriced": tr("⚠️ Overpriced quote", "⚠️ महंगा कोटेशन", is_hi),
+    "farmer": tr("🌾 Rajasthan farmer", "🌾 राजस्थान किसान", is_hi),
+}
+if "active_preset" not in st.session_state:
+    st.session_state["active_preset"] = "custom"
+
+
+def _apply_preset(key: str):
+    st.session_state["active_preset"] = key
+    for wk in ("state_in", "sector_in", "bill_in", "roof_in", "sanc_in", "irr_in", "hp_in", "depth_in", "diesel_in", "quote_in"):
+        st.session_state.pop(wk, None)
+
+
+# ---------------------------------------------------------
+# 2. Sidebar Inputs (Evaluated first so Hero Chip stays accurate)
+# ---------------------------------------------------------
+api_key = get_api_key()
+crustdata_token = _get_crustdata_token()
+
+with st.sidebar:
+    st.markdown(f"### 🎯 {tr('Quick Demo Presets', 'त्वरित डेमो प्रोफ़ाइल', is_hi)}")
+    chosen_key = st.selectbox(
+        tr("Load sample scenario", "नमूना परिदृश्य चुनें", is_hi),
+        PRESET_KEYS,
+        index=PRESET_KEYS.index(st.session_state["active_preset"]),
+        format_func=lambda k: PRESET_LABELS[k],
+        label_visibility="collapsed",
+    )
+    if chosen_key != st.session_state["active_preset"]:
+        _apply_preset(chosen_key)
+        st.rerun()
+
+    p_key = st.session_state["active_preset"]
+    is_preset_home = p_key in ("home", "overpriced")
+    is_preset_overpriced = p_key == "overpriced"
+    is_preset_farmer = p_key == "farmer"
+
+    st.divider()
+    st.markdown(f"### ⚙️ {tr('Consumer Profile', 'उपभोक्ता प्रोफ़ाइल', is_hi)}")
+    if api_key:
+        st.success(f"🔑 {tr('API key connected securely', 'API कुंजी सुरक्षित रूप से जुड़ी है', is_hi)}")
+    else:
+        st.warning(f"⚠️ {tr('No GEMINI_API_KEY in secrets', 'Secrets में GEMINI_API_KEY नहीं मिली', is_hi)}")
+
+    state_keys = list(STATE_DB.keys())
+    state = st.selectbox(
+        tr("📍 State / Region", "📍 राज्य / क्षेत्र", is_hi),
+        state_keys,
+        index=2 if is_preset_farmer else 0,
+        key="state_in",
+    )
+
+    sector_opts = [
+        tr("🏠 Residential Rooftop (PM Surya Ghar)", "🏠 घरेलू रूफटॉप (पीएम सूर्य घर)", is_hi),
+        tr("🌾 Agricultural Pump (PM-KUSUM)", "🌾 कृषि पंप (पीएम-कुसुम)", is_hi),
+    ]
+    sector_label = st.radio(
+        tr("⚡ Sector", "⚡ क्षेत्र", is_hi),
+        sector_opts,
+        index=1 if is_preset_farmer else 0,
+        key="sector_in",
+    )
+    is_rooftop = "Residential" in sector_label or "घरेलू" in sector_label
+
+    st.divider()
+    if is_rooftop:
+        st.markdown(f"### 🏠 {tr('Residential Parameters', 'घरेलू विवरण', is_hi)}")
+        bill = st.number_input(
+            tr("Avg. Monthly Power Bill (₹)", "औसत मासिक बिजली बिल (₹)", is_hi),
+            300, 150000, 3200 if is_preset_home else 2500, 100, key="bill_in"
+        )
+        roof_sqft = st.number_input(
+            tr("Shadow-Free Roof Area (sq. ft.)", "छाया-मुक्त छत क्षेत्रफल (वर्ग फुट)", is_hi),
+            80, 10000, 400 if is_preset_home else 350, 25, key="roof_in"
+        )
+        sanc_kw = st.number_input(
+            tr("Existing Sanctioned Load (kW)", "स्वीकृत लोड (kW)", is_hi),
+            0.5, 50.0, 2.0, 0.5, key="sanc_in"
+        )
+    else:
+        st.markdown(f"### 🌾 {tr('PM-KUSUM Irrigation Setup', 'पीएम-कुसुम सिंचाई विवरण', is_hi)}")
+        irr_options = [
+            tr("⚡ Existing Grid Electric Pump (Component-C)", "⚡ मौजूदा ग्रिड इलेक्ट्रिक पंप (घटक-C)", is_hi),
+            tr("⛽ Off-Grid Diesel Pump Replacement (Component-B)", "⛽ ऑफ-ग्रिड डीजल पंप प्रतिस्थापन (घटक-B)", is_hi),
+            tr("💧 New Borewell / Unconnected Farm (Component-B)", "💧 नया बोरवेल / बिना बिजली खेत (घटक-B)", is_hi),
+        ]
+        irr_choice = st.radio(
+            tr("Current Watering Setup", "वर्तमान सिंचाई व्यवस्था", is_hi),
+            irr_options,
+            index=1 if is_preset_farmer else 0,
+            key="irr_in",
+        )
+        if "Component-C" in irr_choice or "घटक-C" in irr_choice:
+            irr_mode = "GRID_C"
+        elif "Diesel" in irr_choice or "डीजल" in irr_choice:
+            irr_mode = "DIESEL_B"
+        else:
+            irr_mode = "NEW_BORE_B"
+
+        hp = st.select_slider(
+            tr("Pump Capacity (HP)", "पंप क्षमता (HP)", is_hi),
+            options=[3, 5, 7.5, 10],
+            value=7.5 if is_preset_farmer else 5,
+            key="hp_in",
+        )
+        pump_type = (
+            "GRID_EXISTING"
+            if irr_mode == "GRID_C"
+            else st.selectbox(tr("New Solar Pump Type", "नया सोलर पंप प्रकार", is_hi), ["DC", "AC", "SURFACE"])
+        )
+        depth_ft = st.number_input(
+            tr("Borewell Water Depth (ft)", "बोरवेल जल गहराई (फीट)", is_hi),
+            20, 450, 180 if is_preset_farmer else 120, 10, key="depth_in"
+        )
+
+        if irr_mode == "GRID_C":
+            usage_val = st.slider(
+                tr("Avg. Daily Irrigation Hours (during season)", "औसत दैनिक सिंचाई घंटे", is_hi),
+                1.0, 10.0, 5.0, 0.5
+            )
+        elif irr_mode == "DIESEL_B":
+            usage_val = st.number_input(
+                tr("Avg. Monthly Diesel Used (Litres/mo)", "औसत मासिक डीजल खपत (लीटर/माह)", is_hi),
+                10, 1000, 90 if is_preset_farmer else 75, 5, key="diesel_in"
+            )
+        else:
+            usage_val = st.number_input(
+                tr("Monthly Rented Water / Generator Cost (₹)", "मासिक किराये का पानी / जनरेटर खर्च (₹)", is_hi),
+                500, 50000, 4500, 500
+            )
+
+    st.divider()
+    st.markdown(f"### 🔍 {tr('Vendor Quote & OCR', 'वेंडर कोटेशन और OCR', is_hi)}")
+    default_quote = 285000 if is_preset_overpriced else (203000 if p_key == "home" else 0)
+    quote = st.number_input(tr("Installer Quoted Total (₹)", "वेंडर की कुल कीमत (₹)", is_hi), 0, 5000000, default_quote, 5000, key="quote_in")
+    uploaded_img = st.file_uploader(
+        tr("Upload Quote / Bill Image (Optional)", "कोटेशन / बिल की फोटो अपलोड करें", is_hi),
+        type=["png", "jpg", "jpeg"],
+    )
+
+    with st.expander(f"🧠 {tr('AI engine & efficiency', 'AI इंजन और दक्षता', is_hi)}", expanded=False):
+        demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False, key="demo_mode_opt")
+        smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False, key="smart_skip_opt")
+        model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"])
+        engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)
+
+# Dynamic Hero Banner (adapts subsidy chip to active sector & state)
+max_kusum_pct = STATE_DB[state]["central_kusum_pct"] + STATE_DB[state]["kusum_state_sub"]
+hero_sub_chip = (
+    tr("Subsidy up to ₹78,000", "₹78,000 तक सब्सिडी", is_hi)
+    if is_rooftop
+    else tr(f"Up to {max_kusum_pct}% subsidy (up to ₹{round(350000 * max_kusum_pct / 100):,})", f"{max_kusum_pct}% तक सब्सिडी", is_hi)
+)
 
 H(
     f"""
@@ -87,137 +246,12 @@ H(
       )}</p>
       <div class="hero-chips">
         <span class="hero-chip">⚡ {tr("Rule engine + targeted AI", "नियम इंजन + लक्षित AI", is_hi)}</span>
-        <span class="hero-chip">💡 {tr("Subsidy up to ₹78,000", "₹78,000 तक सब्सिडी", is_hi)}</span>
-        <span class="hero-chip">🏢 {tr("Crustdata EPC Verification", "Crustdata वेंडर सत्यापन", is_hi)}</span>
+        <span class="hero-chip">💡 {hero_sub_chip}</span>
+        <span class="hero-chip">🏢 {tr("Installer registry check", "इंस्टॉलर रजिस्ट्री जांच", is_hi)}</span>
       </div>
     </div>
     """
 )
-
-# ---------------------------------------------------------
-# 2. Sidebar Inputs & Judge Quick-Demo Presets
-# ---------------------------------------------------------
-api_key = get_api_key()
-crustdata_token = _get_crustdata_token()
-
-with st.sidebar:
-    st.markdown(f"### 🎯 {tr('Quick Demo Presets (For Judges)', 'त्वरित डेमो प्रोफ़ाइल', is_hi)}")
-    preset = st.selectbox(
-        tr("Load sample scenario", "नमूना परिदृश्य चुनें", is_hi),
-        [
-            tr("Custom User Input", "कस्टम उपयोगकर्ता इनपुट", is_hi),
-            tr("🏠 Haryana Home (Overpriced Quote Alert)", "🏠 हरियाणा घर (महंगा कोटेशन अलर्ट)", is_hi),
-            tr("⚡ Haryana Grid Farmer (5 HP Component-C)", "⚡ हरियाणा ग्रिड किसान (5 HP घटक-C)", is_hi),
-            tr("🚜 Rajasthan Off-Grid Farmer (7.5 HP Diesel)", "🚜 राजस्थान ऑफ-ग्रिड किसान (7.5 HP डीजल)", is_hi),
-        ],
-        label_visibility="collapsed",
-    )
-    is_preset_home = "Haryana Home" in preset or "हरियाणा घर" in preset
-    is_preset_grid_farm = "Haryana Grid" in preset or "हरियाणा ग्रिड" in preset
-    is_preset_diesel_farm = "Rajasthan Off-Grid" in preset or "राजस्थान ऑफ-ग्रिड" in preset
-    is_any_farm_preset = is_preset_grid_farm or is_preset_diesel_farm
-
-    st.divider()
-    st.markdown(f"### ⚙️ {tr('Consumer Profile', 'उपभोक्ता प्रोफ़ाइल', is_hi)}")
-    if api_key:
-        st.success(f"🔑 {tr('API key connected securely', 'API कुंजी सुरक्षित रूप से जुड़ी है', is_hi)}")
-    else:
-        st.warning(f"⚠️ {tr('No GEMINI_API_KEY in secrets', 'Secrets में GEMINI_API_KEY नहीं मिली', is_hi)}")
-
-    state_keys = list(STATE_DB.keys())
-    default_state_idx = 2 if is_preset_diesel_farm else 0
-    state = st.selectbox(tr("📍 State / Region", "📍 राज्य / क्षेत्र", is_hi), state_keys, index=default_state_idx)
-
-    sector_opts = [
-        tr("🏠 Residential Rooftop (PM Surya Ghar)", "🏠 घरेलू रूफटॉप (पीएम सूर्य घर)", is_hi),
-        tr("🌾 Agricultural Pump (PM-KUSUM)", "🌾 कृषि पंप (पीएम-कुसुम)", is_hi),
-    ]
-    sector_label = st.radio(
-        tr("⚡ Sector", "⚡ क्षेत्र", is_hi),
-        sector_opts,
-        index=1 if is_any_farm_preset else 0,
-    )
-    is_rooftop = "Residential" in sector_label or "घरेलू" in sector_label
-
-    st.divider()
-    if is_rooftop:
-        st.markdown(f"### 🏠 {tr('Residential Parameters', 'घरेलू विवरण', is_hi)}")
-        bill = st.number_input(
-            tr("Avg. Monthly Power Bill (₹)", "औसत मासिक बिजली बिल (₹)", is_hi),
-            300, 150000, 3200 if is_preset_home else 2500, 100
-        )
-        roof_sqft = st.number_input(
-            tr("Shadow-Free Roof Area (sq. ft.)", "छाया-मुक्त छत क्षेत्रफल (वर्ग फुट)", is_hi),
-            80, 10000, 400 if is_preset_home else 350, 25
-        )
-        sanc_kw = st.number_input(
-            tr("Existing Sanctioned Load (kW)", "स्वीकृत लोड (kW)", is_hi),
-            0.5, 50.0, 2.0, 0.5
-        )
-    else:
-        st.markdown(f"### 🌾 {tr('PM-KUSUM Irrigation Setup', 'पीएम-कुसुम सिंचाई विवरण', is_hi)}")
-        irr_options = [
-            tr("⚡ Existing Grid Electric Pump (Component-C)", "⚡ मौजूदा ग्रिड इलेक्ट्रिक पंप (घटक-C)", is_hi),
-            tr("⛽ Off-Grid Diesel Pump Replacement (Component-B)", "⛽ ऑफ-ग्रिड डीजल पंप प्रतिस्थापन (घटक-B)", is_hi),
-            tr("💧 New Borewell / Unconnected Farm (Component-B)", "💧 नया बोरवेल / बिना बिजली खेत (घटक-B)", is_hi),
-        ]
-        irr_choice = st.radio(
-            tr("Current Watering Setup", "वर्तमान सिंचाई व्यवस्था", is_hi),
-            irr_options,
-            index=1 if is_preset_diesel_farm else 0,
-        )
-        if "Component-C" in irr_choice or "घटक-C" in irr_choice:
-            irr_mode = "GRID_C"
-        elif "Diesel" in irr_choice or "डीजल" in irr_choice:
-            irr_mode = "DIESEL_B"
-        else:
-            irr_mode = "NEW_BORE_B"
-
-        hp = st.select_slider(
-            tr("Pump Capacity (HP)", "पंप क्षमता (HP)", is_hi),
-            options=[3, 5, 7.5, 10],
-            value=7.5 if is_preset_diesel_farm else 5,
-        )
-        pump_type = (
-            "GRID_EXISTING"
-            if irr_mode == "GRID_C"
-            else st.selectbox(tr("New Solar Pump Type", "नया सोलर पंप प्रकार", is_hi), ["DC", "AC", "SURFACE"])
-        )
-        depth_ft = st.number_input(
-            tr("Borewell Water Depth (ft)", "बोरवेल जल गहराई (फीट)", is_hi),
-            20, 450, 180 if is_preset_diesel_farm else 120, 10
-        )
-
-        if irr_mode == "GRID_C":
-            usage_val = st.slider(
-                tr("Avg. Daily Irrigation Hours (during season)", "औसत दैनिक सिंचाई घंटे", is_hi),
-                1.0, 10.0, 5.0, 0.5
-            )
-        elif irr_mode == "DIESEL_B":
-            usage_val = st.number_input(
-                tr("Avg. Monthly Diesel Used (Litres/mo)", "औसत मासिक डीजल खपत (लीटर/माह)", is_hi),
-                10, 1000, 90 if is_preset_diesel_farm else 75, 5
-            )
-        else:
-            usage_val = st.number_input(
-                tr("Monthly Rented Water / Generator Cost (₹)", "मासिक किराये का पानी / जनरेटर खर्च (₹)", is_hi),
-                500, 50000, 4500, 500
-            )
-
-    st.divider()
-    st.markdown(f"### 🔍 {tr('Vendor Quote & OCR', 'वेंडर कोटेशन और OCR', is_hi)}")
-    default_quote = 285000 if is_preset_home else 0
-    quote = st.number_input(tr("Installer Quoted Total (₹)", "वेंडर की कुल कीमत (₹)", is_hi), 0, 5000000, default_quote, 5000)
-    uploaded_img = st.file_uploader(
-        tr("Upload Quote / Bill Image (Optional)", "कोटेशन / बिल की फोटो अपलोड करें", is_hi),
-        type=["png", "jpg", "jpeg"],
-    )
-
-    with st.expander(f"🧠 {tr('AI engine & efficiency', 'AI इंजन और दक्षता', is_hi)}", expanded=False):
-        demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False, key="demo_mode_opt")
-        smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False, key="smart_skip_opt")
-        model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"])
-        engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)
 
 # ---------------------------------------------------------
 # 3. Deterministic Calculation & KPI Strip
@@ -236,14 +270,30 @@ scheme_tag = (
 )
 H(
     f"""
-    <div class="info-strip">
-      🏛️ <b>{tr("Jurisdiction:", "क्षेत्राधिकार:", is_hi)}</b> {state} &nbsp;|&nbsp;
-      ⚡ <b>{tr("Utility:", "विद्युत वितरण कंपनी:", is_hi)}</b> {st_info['discom']} ({st_info['regulator']}) &nbsp;|&nbsp;
-      ☀️ <b>{tr("Insolation:", "सौर विकिरण:", is_hi)}</b> {st_info['insolation']} kWh/kW/day &nbsp;|&nbsp;
-      📜 <b>{tr("Scheme:", "योजना:", is_hi)}</b> {scheme_tag}
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px 0;">
+      <span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:999px;padding:5px 13px;font-size:0.82rem;color:#1E293B;">🏛️ <b>{state}</b></span>
+      <span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:999px;padding:5px 13px;font-size:0.82rem;color:#1E293B;">⚡ {st_info['discom']} ({st_info['regulator']})</span>
+      <span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:999px;padding:5px 13px;font-size:0.82rem;color:#1E293B;">☀️ {st_info['insolation']} kWh/kW/day</span>
+      <span style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:5px 13px;font-size:0.82rem;color:#065F46;">📜 <b>{scheme_tag}</b></span>
     </div>
     """
 )
+
+# Main-area "Try a demo" buttons synced with sidebar selector
+d_cols = st.columns([1.1, 1.3, 1.3, 1.3])
+with d_cols[0]:
+    st.markdown(f"<div style='padding-top:6px;font-weight:700;color:#334155;'>🎯 {tr('Try a demo:', 'डेमो आज़माएँ:', is_hi)}</div>", unsafe_allow_html=True)
+for idx, p_id in enumerate(["home", "overpriced", "farmer"], start=1):
+    with d_cols[idx]:
+        is_active = st.session_state["active_preset"] == p_id
+        if st.button(
+            PRESET_LABELS[p_id],
+            key=f"main_demo_{p_id}",
+            type="primary" if is_active else "secondary",
+            use_container_width=True,
+        ):
+            _apply_preset(p_id)
+            st.rerun()
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -281,6 +331,16 @@ with c3:
 with c4:
     pb_txt = f"{res['payback']} {tr('Years', 'वर्ष', is_hi)}" if res["payback"] < 50 else "N/A"
     H(f'<div class="kpi-card purple"><div class="kpi-title">{tr("EST. PAYBACK", "अनुमानित पेबैक", is_hi)}</div><p class="kpi-value">{pb_txt}</p><div class="kpi-sub">🌱 ₹{res["save_yr1"]:,}/{tr("yr", "वर्ष", is_hi)} · {res["co2_yr"]}T CO₂</div></div>')
+
+# Single headline takeaway stat under KPI cards
+H(
+    f"""
+    <div style="background:linear-gradient(90deg,#ECFDF5 0%,#F0FDF4 100%);border:1px solid #A7F3D0;border-left:5px solid #059669;border-radius:12px;padding:12px 18px;margin:12px 0 10px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:1.15rem;font-weight:800;color:#065F46;">💰 {tr("25-Year Net Savings:", "25-वर्षीय शुद्ध बचत:", is_hi)} ₹{res['net_25yr']:,} ({_fmt_lakh(res['net_25yr'], is_hi)})</span>
+      <span style="font-size:0.84rem;color:#047857;">{tr("After subtracting your net investment, annual O&M, and 0.5%/yr panel degradation", "शुद्ध निवेश, वार्षिक रखरखाव और 0.5%/वर्ष पैनल गिरावट घटाने के बाद", is_hi)}</span>
+    </div>
+    """
+)
 
 if is_rooftop:
     st.info(
