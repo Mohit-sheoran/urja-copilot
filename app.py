@@ -256,7 +256,7 @@ with c1:
         f"⚡ ~{res['daily_units']} {tr('units/day', 'यूनिट/दिन', is_hi)} · {res['offset_pct']}% {tr('of usage', 'खपत की पूर्ति', is_hi)}"
         if is_rooftop
         else (
-            tr("Grid-Tied Array (Reuses Pump)", "ग्रिड-युक्त ऐरे (मौजूदा पंप)", is_hi)
+            f"💧 {res['head_m']}m {tr('head', 'हेड', is_hi)} · {tr('Grid-Tied (Reuses Pump)', 'ग्रिड-युक्त (मौजूदा पंप)', is_hi)}"
             if res["irr_mode"] == "GRID_C"
             else f"💧 {res['head_m']}m {tr('head', 'हेड', is_hi)} · {res['pump_type']} {tr('pump', 'पंप', is_hi)}"
         )
@@ -296,7 +296,15 @@ else:
     st.info(f"🌾 **{tr('Regional Irrigation Economics:', 'क्षेत्रीय सिंचाई अर्थशास्त्र:', is_hi)}** {res['economics_note']}")
     if res.get("cap_note"):
         st.caption(f"ℹ️ {res['cap_note']}")
-    if res["hp"] < res["min_hp"] and res["irr_mode"] != "GRID_C":
+   if res["depth_ft"] > 300:
+        st.warning(
+            tr(
+                f"⚠️ **Deep Borewell ({res['depth_ft']} ft / {res['head_m']}m head):** Requires a high-head multi-stage submersible pump (12–16 stages) and heavy-duty riser pipe; standard low-head pumps will fail to lift water.",
+                f"⚠️ **गहरा बोरवेल ({res['depth_ft']} फीट / {res['head_m']}m हेड):** इसके लिए हाई-हेड मल्टी-स्टेज सबमर्सिबल पंप (12–16 स्टेज) आवश्यक है; सामान्य पंप पानी नहीं उठा पाएंगे।",
+                is_hi,
+            )
+        )
+    elif res["hp"] < res["min_hp"]:
         st.warning(
             tr(
                 f"⚠️ {res['depth_ft']} ft depth ({res['head_m']}m head) typically requires at least a **{res['min_hp']} HP** pump.",
