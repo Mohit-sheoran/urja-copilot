@@ -126,14 +126,14 @@ with st.sidebar:
     else:
         st.warning(f"⚠️ {tr('No GEMINI_API_KEY in secrets', 'Secrets में GEMINI_API_KEY नहीं मिली', is_hi)}")
 
-    state_keys = list(STATE_DB.keys())
+state_keys = list(STATE_DB.keys())
     r_idx = state_keys.index("Rajasthan") if "Rajasthan" in state_keys else 0
-   state = st.selectbox(
-       tr("📍 State / Region", "📍 राज्य / क्षेत्र", is_hi),
-       state_keys,
-       index=r_idx if is_preset_farmer else 0,
-       key="state_in",
-   )
+    state = st.selectbox(
+        tr("📍 State / Region", "📍 राज्य / क्षेत्र", is_hi),
+        state_keys,
+        index=r_idx if is_preset_farmer else 0,
+        key="state_in",
+    )
 
     sector_opts = [
         tr("🏠 Residential Rooftop (PM Surya Ghar)", "🏠 घरेलू रूफटॉप (पीएम सूर्य घर)", is_hi),
