@@ -91,7 +91,7 @@ def friendly_error(err: Exception) -> str:
 def _gen_config(system_prompt: str, max_tokens: int) -> types.GenerateContentConfig:
     cfg = {
         "system_instruction": system_prompt,
-        "temperature": 0.25,
+        "temperature": 0.1,
         "max_output_tokens": max_tokens,
     }
     try:
