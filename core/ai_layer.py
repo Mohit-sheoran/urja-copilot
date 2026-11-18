@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 from core.config import AUTO, CFG
 
-_BLOCK = ("tts", "image", "audio", "robotics", "computer-use", "customtools", "001", "3.6", "3.7")
+_BLOCK = ("tts", "image", "audio", "robotics", "computer-use", "customtools", "001", "3.6", "3.7", "exp", "preview")
 
 
 def get_api_key() -> str:
@@ -130,12 +130,15 @@ def run_llm(
     stream: bool = True,
     render_inline: bool = True,
 ):
-    """Fetch Gemini response with 5s per-model timeout and automatic fallback."""
+    """Fetch Gemini response with fast timeout, stable model routing & 503 auto-retry."""
     found = list_models(api_key)
     if engine_choice != AUTO:
-        models = [engine_choice] + [m for m in found if m != engine_choice][:3]
+        base_models = [engine_choice] + [m for m in found if m != engine_choice][:2]
     else:
-        models = found[:4]
+        base_models = found[:3]
+
+    # Retry the fastest model once after a brief backoff if all endpoints return 503
+    models = base_models + [base_models[0]]
 
     contents = [image_part, user_prompt] if image_part is not None else user_prompt
     cfg = _gen_config(system_prompt, max_tokens)
@@ -146,9 +149,14 @@ def run_llm(
         status = st.empty()
         t0 = time.perf_counter()
         try:
-            prefix = "Retrying with" if idx else "Contacting"
-            status.info(f"⏳ {prefix} `{model_name}` ...")
-            resp = _call_with_timeout(client, model_name, contents, cfg, timeout_sec=5)
+            if idx == len(base_models):
+                status.info(f"⏳ Servers busy — retrying `{model_name}` ...")
+                time.sleep(1.2)
+            else:
+                prefix = "Retrying with" if idx else "Contacting"
+                status.info(f"⏳ {prefix} `{model_name}` ...")
+
+            resp = _call_with_timeout(client, model_name, contents, cfg, timeout_sec=7)
             status.empty()
             text = (resp.text or "").strip()
             if render_inline:
