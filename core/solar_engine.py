@@ -121,20 +121,20 @@ def calc_pump(
     - 'DIESEL_B': Off-Grid Diesel Pump Replacement (PM-KUSUM Component-B)
     - 'NEW_BORE_B': New Borewell / Unconnected Farm avoiding grid extension (PM-KUSUM Component-B)
     """
-    st_info = STATE_DB[state]
+   st_info = STATE_DB[state]
     insol = st_info["insolation"]
     head_m = round(depth_ft * 0.3048, 1)
     min_hp = 3 if head_m <= 25 else (5 if head_m <= 45 else (7.5 if head_m <= 70 else 10))
+    # High-head factor: deeper water (>100 ft) increases motor load & pumping time
+    depth_factor = round(min(1.35, max(0.85, 0.85 + (depth_ft / 600.0))), 2)
 
     c_pct = st_info["central_kusum_pct"]
     s_pct = st_info["kusum_state_sub"]
 
     if irr_mode == "GRID_C":
-        # Component-C (IPS): Farmer keeps existing electric pump; installs up to 2x pump kW (~1.5 kWp/HP)
         scheme_code = "PM-KUSUM Component-C (IPS)"
         array_kwp = round(hp * CFG["comp_c_kwp_per_hp"], 2)
         bench = round(array_kwp * CFG["comp_c_cost_per_kwp"])
-        # MNRE subsidy capped at 7.5 HP equivalent (11.25 kWp)
         sub_eligible_cost = min(bench, round(7.5 * CFG["comp_c_kwp_per_hp"] * CFG["comp_c_cost_per_kwp"]))
         c_sub = round(sub_eligible_cost * c_pct / 100)
         s_sub = round(sub_eligible_cost * s_pct / 100)
@@ -142,11 +142,10 @@ def calc_pump(
         eff_cost = quote if quote > 0 else bench
         net = max(0, eff_cost - sub)
 
-        # Annual solar generation vs farm pump self-consumption (usage_val = irrigation hours/day)
+        # Deeper borewells draw higher self-consumption kWh, leaving less surplus to export
         gen_yr1 = array_kwp * insol * 365 * 0.80
         pump_kw = hp * 0.746
-        # Typical 220 irrigation days/year
-        self_use_kwh = min(gen_yr1 * 0.75, pump_kw * usage_val * 220)
+        self_use_kwh = min(gen_yr1 * 0.85, pump_kw * usage_val * 220 * depth_factor)
         export_kwh = max(0.0, gen_yr1 - self_use_kwh)
 
         bill_saved = self_use_kwh * st_info["agri_tariff"]
