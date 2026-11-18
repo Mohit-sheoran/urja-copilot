@@ -163,3 +163,41 @@ def get_local_installers(state: str, pincode: str = ""):
         },
     ]
     return vendors, resolved_area
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def verify_epc_vendor(company_name: str, api_token: str):
+    """Queries Crustdata /company/identify. Raises on network/API failure so errors are never cached."""
+    if not api_token or not company_name or len(company_name.strip()) < 3:
+        return None
+
+    clean_token = api_token.strip().replace("Bearer ", "").replace("Token ", "")
+    name = company_name.strip()
+
+    resp = requests.post(
+        "https://api.crustdata.com/company/identify",
+        json={"names": [name]},
+        headers={
+            "Authorization": f"Bearer {clean_token}",
+            "Content-Type": "application/json",
+            "x-api-version": "2025-11-01",
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    if isinstance(data, list) and data:
+        matches = data[0].get("matches", [])
+        if matches:
+            top = matches[0]
+            c = top.get("company_data", {})
+            b = c.get("basic_info", {})
+            return {
+                "found": True,
+                "name": b.get("name") or name,
+                "domain": b.get("primary_domain") or b.get("website") or "",
+                "confidence_score": top.get("confidence_score"),
+            }
+
+    return {"found": False, "name": name}
