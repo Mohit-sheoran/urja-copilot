@@ -1,5 +1,6 @@
 """UrjaMitra (ऊर्जा मित्र) — Universal All-India Solar & PM-KUSUM Entry Point."""
 
+import html
 import math
 import urllib.parse
 import plotly.graph_objects as go
@@ -50,13 +51,14 @@ def _fmt_lakh(val: float, is_hi: bool) -> str:
 
 
 def _render_eff(m: dict):
+    lat = m.get("latency", m.get("total", 0))
     H(
         f"""
         <div class="eff-bar">
-          <span class="eff-chip">🤖 {m['model']}</span>
-          <span class="eff-chip good">⚡ TTFT {m['ttft']}s · Total {m['total']}s</span>
+          <span class="eff-chip">🤖 {html.escape(str(m['model']))}</span>
+          <span class="eff-chip good">⚡ Latency {lat}s</span>
           <span class="eff-chip">🔢 {m['in_tok']} in + {m['out_tok']} out = {m['tot_tok']} tok</span>
-          <span class="eff-chip good">📉 ~{m['saved_pct']}% tokens saved</span>
+          <span class="eff-chip good">📉 ~{m['saved_pct']}% fewer tokens (est. vs 1,800-token baseline)</span>
         </div>
         """
     )
@@ -124,11 +126,12 @@ with st.sidebar:
     else:
         st.warning(f"⚠️ {tr('No GEMINI_API_KEY in secrets', 'Secrets में GEMINI_API_KEY नहीं मिली', is_hi)}")
 
-    state_keys = list(STATE_DB.keys())
+   state_keys = list(STATE_DB.keys())
+    r_idx = state_keys.index("Rajasthan") if "Rajasthan" in state_keys else 0
     state = st.selectbox(
         tr("📍 State / Region", "📍 राज्य / क्षेत्र", is_hi),
         state_keys,
-        index=2 if is_preset_farmer else 0,
+        index=r_idx if is_preset_farmer else 0,
         key="state_in",
     )
 
@@ -401,57 +404,84 @@ with tab1:
     st.subheader(f"🏢 {tr('Installer & EPC Vendor Credibility Audit', 'सोलर वेंडर और EPC विश्वसनीयता ऑडिट', is_hi)}")
     st.caption(tr("Verify installer legitimacy and institutional footprint via Crustdata B2B intelligence.", "Crustdata B2B इंटेलिजेंस के माध्यम से इंस्टॉलर की वैधता जांचें।", is_hi))
 
+   preset_vendor_default = {
+        "home": "Tata Power Solar",
+        "overpriced": "Shree Shyam Local Solar Works",
+        "farmer": "Waaree",
+    }.get(p_key, "")
+
     v_col1, v_col2 = st.columns([3, 1])
     with v_col1:
         vendor_name = st.text_input(
             tr("Installer Company Name", "इंस्टॉलर कंपनी का नाम", is_hi),
-            value="Waaree" if p_key != "custom" else "",
-            placeholder=tr("e.g. Tata Power Solar, Loom Solar, Waaree, Vikram Solar", "जैसे: Tata Power Solar, Loom Solar, Waaree", is_hi),
-            key="vendor_input",
+            value=preset_vendor_default,
+            placeholder=tr("e.g. Tata Power Solar, Loom Solar, Waaree", "जैसे: Tata Power Solar, Loom Solar, Waaree", is_hi),
+            key=f"vendor_input_{p_key}",
         )
     with v_col2:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-        verify_clicked = st.button(f"🔍 {tr('Verify Vendor', 'वेंडर जांचें', is_hi)}", key="verify_btn")
+        verify_clicked = st.button(f"🔍 {tr('Check Registry', 'रजिस्ट्री जांचें', is_hi)}", key="verify_btn")
 
     if verify_clicked and vendor_name.strip():
         if not crustdata_token:
             st.session_state["vendor_audit_state"] = {"status": "no_token"}
         else:
-            with st.spinner(tr("Querying Crustdata corporate registry...", "Crustdata कॉर्पोरेट रजिस्ट्री की जांच हो रही है...", is_hi)):
-                v_res = verify_epc_vendor(vendor_name, crustdata_token)
-            st.session_state["vendor_audit_state"] = {
-                "status": "done",
-                "query": vendor_name.strip(),
-                "res": v_res,
-            }
+            try:
+                with st.spinner(tr("Querying Crustdata company registry...", "Crustdata कंपनी रजिस्ट्री की जांच हो रही है...", is_hi)):
+                    v_res = verify_epc_vendor(vendor_name, crustdata_token)
+                st.session_state["vendor_audit_state"] = {
+                    "status": "done",
+                    "query": vendor_name.strip(),
+                    "res": v_res,
+                }
+            except Exception:
+                st.session_state["vendor_audit_state"] = {"status": "api_error"}
 
     v_state = st.session_state.get("vendor_audit_state")
     if v_state:
         if v_state["status"] == "no_token":
-            st.info(tr("ℹ️ Add `CRUSTDATA_API_TOKEN` in Streamlit Secrets to enable live B2B vendor screening.", "ℹ️ लाइव B2B वेंडर जांच के लिए Streamlit Secrets में `CRUSTDATA_API_TOKEN` जोड़ें।", is_hi))
+            st.info(tr("ℹ️ Add `CRUSTDATA_API_TOKEN` in Streamlit Secrets to enable live company registry lookup.", "ℹ️ लाइव कंपनी रजिस्ट्री जांच के लिए Streamlit Secrets में `CRUSTDATA_API_TOKEN` जोड़ें।", is_hi))
+        elif v_state["status"] == "api_error":
+            st.warning(tr("⚠️ Could not reach Crustdata. This is not a verdict on the vendor.", "⚠️ Crustdata से संपर्क नहीं हो सका। यह वेंडर पर कोई निर्णय नहीं है।", is_hi))
         elif v_state["status"] == "done":
             v_res = v_state["res"]
             q_name = v_state["query"]
             if v_res and v_res.get("found"):
+                safe_name = html.escape(str(v_res["name"]))
+                raw_dom = str(v_res.get("domain") or "").strip()
+                safe_dom = html.escape(raw_dom)
+                dom_href = html.escape(raw_dom if raw_dom.startswith("http") else f"https://{raw_dom}", quote=True)
+                dom_item = (
+                    f'<li><b>{tr("Domain:", "डोमेन:", is_hi)}</b> <a href="{dom_href}" target="_blank" rel="noopener">{safe_dom}</a></li>'
+                    if raw_dom
+                    else ""
+                )
+                conf = v_res.get("confidence_score")
+                conf_item = (
+                    f'<li><b>{tr("Match Confidence:", "मिलान स्कोर:", is_hi)}</b> {html.escape(str(conf))}</li>'
+                    if conf is not None
+                    else ""
+                )
                 H(
                     f"""
                     <div class="info-strip" style="border-left-color:#059669;background:#F0FDF4;">
-                      <b style="color:#047857;font-size:1rem;">🛡️ {tr("Verified Solar EPC Entity (Crustdata Verified)", "सत्यापित सोलर EPC कंपनी (Crustdata द्वारा प्रमाणित)", is_hi)}</b>
-                      <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.7;">
-                        <li><b>{tr("Entity Name:", "कंपनी का नाम:", is_hi)}</b> {v_res['name']}</li>
-                        <li><b>{tr("Web Presence:", "वेबसाइट:", is_hi)}</b> <a href="{v_res['domain'] if str(v_res['domain']).startswith('http') else 'https://' + str(v_res['domain'])}" target="_blank">{v_res['domain']}</a></li>
-                        <li><b>{tr("Operational Scale:", "कार्य स्तर:", is_hi)}</b> {v_res['headcount']}</li>
-                        <li><b>{tr("Jurisdiction:", "क्षेत्राधिकार:", is_hi)}</b> {v_res['location']}</li>
-                        <li><b>{tr("Risk Assessment:", "जोखिम मूल्यांकन:", is_hi)}</b> {tr("Active registered entity. Low risk of vendor abandonment prior to net-metering sign-off.", "सक्रिय पंजीकृत कंपनी। नेट-मीटरिंग से पहले काम अधूरा छोड़ने का जोखिम बहुत कम है।", is_hi)}</li>
+                      <b style="color:#047857;font-size:1rem;">🏢 {tr("Company record found", "कंपनी रिकॉर्ड मिला", is_hi)}</b>
+                      <ul style="margin:8px 0 6px 0;padding-left:20px;line-height:1.7;">
+                        <li><b>{tr("Registered Name:", "पंजीकृत नाम:", is_hi)}</b> {safe_name}</li>
+                        {dom_item}
+                        {conf_item}
                       </ul>
+                      <div style="font-size:0.84rem;color:#065F46;">
+                        ℹ️ {tr("This shows the company exists, not that it is MNRE-empanelled. Verify on pmsuryaghar.gov.in.", "यह दर्शाता है कि कंपनी अस्तित्व में है, न कि यह MNRE-पंजीकृत है। pmsuryaghar.gov.in पर सत्यापित करें।", is_hi)}
+                      </div>
                     </div>
                     """
                 )
             else:
-                st.warning(
+                st.info(
                     tr(
-                        f"⚠️ **Unverified / Local Contractor Alert:** No institutional B2B footprint found for `{q_name}` on Crustdata. Ensure your contract mandates milestone-based payments (withhold 20% until DISCOM commissioning and joint inspection).",
-                        f"⚠️ **असत्यापित / स्थानीय ठेकेदार चेतावनी:** `{q_name}` का संस्थागत B2B रिकॉर्ड Crustdata पर नहीं मिला। अनुबंध में चरणबद्ध भुगतान सुनिश्चित करें (DISCOM कमीशनिंग तक 20% राशि रोक कर रखें)।",
+                        f"ℹ️ **No corporate record found for `{q_name}`.** Small local installers are often unlisted, so this is not proof of fraud. Check registration with your DISCOM/state agency and pay in milestones.",
+                        f"ℹ️ **`{q_name}` का कॉर्पोरेट रिकॉर्ड नहीं मिला।** छोटे स्थानीय इंस्टॉलर अक्सर सूचीबद्ध नहीं होते, इसलिए यह धोखाधड़ी का प्रमाण नहीं है। अपने DISCOM/राज्य एजेंसी के साथ पंजीकरण जांचें और चरणों में भुगतान करें।",
                         is_hi,
                     )
                 )
@@ -610,12 +640,19 @@ with tab2:
         )
     )
 
-    r_col1, r_col2 = st.columns([1, 1])
+   r_col1, r_col2 = st.columns([1, 1])
     with r_col1:
         roof_photo = st.file_uploader(
             tr("Upload Rooftop Photo (JPG/PNG)", "छत की फोटो अपलोड करें", is_hi),
             type=["jpg", "jpeg", "png"],
             key="roof_survey_upload",
+        )
+        st.caption(
+            tr(
+                "🔒 Your photo is sent to Google Gemini for analysis and is not stored by UrjaMitra.",
+                "🔒 आपकी फोटो विश्लेषण के लिए Google Gemini को भेजी जाती है और UrjaMitra द्वारा संग्रहीत नहीं की जाती है।",
+                is_hi,
+            )
         )
         cam_photo = st.camera_input(
             tr("Or Capture Live Roof Photo", "या कैमरे से छत की फोटो लें", is_hi),
@@ -628,11 +665,15 @@ with tab2:
             st.image(active_roof_img, caption=tr("Uploaded Site Photo", "अपलोड की गई छत की फोटो", is_hi), use_container_width=True)
             if st.button(f"🔍 {tr('Analyze Roof Shading with Gemini Vision', 'Gemini Vision से छत की छाया जांचें', is_hi)}", key="analyze_roof_btn"):
                 if demo_mode or not api_key:
-                    st.session_state["roof_vision_res"] = tr(
-                        "• **Shading Check:** Ensure south-facing panels sit at least 1.5m away from overhead water tanks and tall parapet walls.\n• **Tilt & Orientation:** Recommended south tilt ~28° for optimal annual generation.\n• **Mounting Note:** Use elevated hot-dip GI structure if parapet height exceeds 3 ft.",
-                        "• **छाया जांच:** दक्षिणमुखी पैनलों को पानी की टंकी और ऊँची मुंडेर से कम से कम 1.5 मीटर दूर रखें।\n• **झुकाव और दिशा:** अधिकतम बिजली उत्पादन के लिए दक्षिण दिशा में ~28° झुकाव रखें।\n• **स्ट्रक्चर सुझाव:** यदि मुंडेर 3 फीट से ऊँची है, तो ऊँचे हॉट-डिप GI स्ट्रक्चर का उपयोग करें।",
-                        is_hi,
-                    )
+                    st.session_state["roof_vision_res"] = {
+                        "is_sample": True,
+                        "text": tr(
+                            "• **Shading Check:** Ensure south-facing panels sit at least 1.5m away from overhead water tanks and tall parapet walls.\n• **Tilt & Orientation:** Recommended south tilt ~28° for optimal annual generation.\n• **Mounting Note:** Use elevated hot-dip GI structure if parapet height exceeds 3 ft.",
+                            "• **छाया जांच:** दक्षिणमुखी पैनलों को पानी की टंकी और ऊँची मुंडेर से कम से कम 1.5 मीटर दूर रखें।\n• **झुकाव और दिशा:** अधिकतम बिजली उत्पादन के लिए दक्षिण दिशा में ~28° झुकाव रखें।\n• **स्ट्रक्चर सुझाव:** यदि मुंडेर 3 फीट से ऊँची है, तो ऊँचे हॉट-डिप GI स्ट्रक्चर का उपयोग करें।",
+                            is_hi,
+                        ),
+                        "met": None,
+                    }
                 else:
                     roof_part = prepare_image(active_roof_img)
                     sys_roof = (
@@ -651,23 +692,30 @@ with tab2:
                         render_inline=False,
                     )
                     if r_txt:
-                        st.session_state["roof_vision_res"] = r_txt
-                        st.session_state["roof_vision_met"] = r_met
+                        st.session_state["roof_vision_res"] = {
+                            "is_sample": False,
+                            "text": r_txt,
+                            "met": r_met,
+                        }
         else:
             st.info(tr("Upload or take a photo of your terrace on the left to run an AI shading & obstacle check.", "AI छाया और अवरोध जांच के लिए बाईं ओर अपनी छत की फोटो अपलोड करें।", is_hi))
 
-    if st.session_state.get("roof_vision_res"):
-        st.success(f"☀️ **{tr('Site Survey Findings:', 'साइट सर्वेक्षण निष्कर्ष:', is_hi)}**")
-        st.markdown(st.session_state["roof_vision_res"])
-        if st.session_state.get("roof_vision_met"):
-            _render_eff(st.session_state["roof_vision_met"])
+    roof_state = st.session_state.get("roof_vision_res")
+    if roof_state:
+        if roof_state["is_sample"]:
+            st.info(f"ℹ️ **{tr('Sample guidance, not an analysis of your photo.', 'नमूना मार्गदर्शन, आपकी फोटो का विश्लेषण नहीं।', is_hi)}**")
+        else:
+            st.success(f"☀️ **{tr('Site Survey Findings:', 'साइट सर्वेक्षण निष्कर्ष:', is_hi)}**")
+        st.markdown(roof_state["text"])
+        if roof_state.get("met"):
+            _render_eff(roof_state["met"])
 
     st.divider()
-    st.subheader(f"📍 {tr('Nearby MNRE-Empanelled Installers & Quote Connect', 'नजदीकी MNRE-पंजीकृत सोलर वेंडर', is_hi)}")
-    st.caption(
+    st.subheader(f"📍 {tr('Local Installer Directory (Sample Preview)', 'स्थानीय इंस्टॉलर निर्देशिका (नमूना पूर्वावलोकन)', is_hi)}")
+    st.warning(
         tr(
-            "Transparent local directory: Sponsored Partners are clearly labeled; rankings are never hidden behind fake organic scores.",
-            "पारदर्शी स्थानीय निर्देशिका: प्रायोजित भागीदारों (Sponsored Partners) पर स्पष्ट लेबल लगा है।",
+            "SAMPLE DATA, demo only. Verify real installers on pmsuryaghar.gov.in",
+            "नमूना डेटा (SAMPLE DATA), केवल डेमो के लिए। वास्तविक इंस्टॉलर pmsuryaghar.gov.in पर सत्यापित करें।",
             is_hi,
         )
     )
@@ -682,30 +730,34 @@ with tab2:
         )
 
     vendors, area_label = get_local_installers(state, user_pin)
+    safe_area = html.escape(area_label)
     for v in vendors:
-        badge_bg = "#FEF3C7" if v["tier"] == "Sponsored Partner" else "#E0F2FE"
-        badge_fg = "#92400E" if v["tier"] == "Sponsored Partner" else "#075985"
+        badge_bg = "#FEF3C7" if "Sponsored" in v["tier"] else "#E0F2FE"
+        badge_fg = "#92400E" if "Sponsored" in v["tier"] else "#075985"
         H(
             f"""
             <div class="info-strip" style="margin-bottom:10px;">
               <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                 <div>
-                  <b style="font-size:1rem;">{v['name']}</b> &nbsp;
-                  <span style="background:{badge_bg};color:{badge_fg};padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:700;">{v['tier']}</span>
+                  <b style="font-size:1rem;">{html.escape(v['name'])}</b> &nbsp;
+                  <span style="background:{badge_bg};color:{badge_fg};padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:700;">{html.escape(v['tier'])}</span>
                 </div>
-                <div style="font-size:0.82rem;color:#475569;"><b>MNRE ID:</b> {v['mnre_id']} · {v['rating']}</div>
               </div>
               <div style="margin-top:6px;font-size:0.86rem;color:#334155;">
-                📍 <b>{tr("Service Area:", "सेवा क्षेत्र:", is_hi)}</b> {area_label} &nbsp;|&nbsp; 🔧 <b>{tr("Focus:", "विशेषज्ञता:", is_hi)}</b> {v['specialty']}
+                📍 <b>{tr("Service Area:", "सेवा क्षेत्र:", is_hi)}</b> {safe_area} &nbsp;|&nbsp; 🔧 <b>{tr("Focus:", "विशेषज्ञता:", is_hi)}</b> {html.escape(v['specialty'])}
               </div>
             </div>
             """
         )
 
-    with st.expander(f"📩 {tr('Request Verified Quote / Share Roof Survey (Opt-In)', 'कोटेशन मांगें / छत सर्वेक्षण साझा करें', is_hi)}", expanded=False):
+    with st.expander(f"📩 {tr('Request Verified Quote / Share Roof Survey (Demo)', 'कोटेशन मांगें / छत सर्वेक्षण साझा करें (डेमो)', is_hi)}", expanded=False):
         vendor_names = [v["name"] for v in vendors]
         chosen_vendor = st.selectbox(tr("Select Installer", "वेंडर चुनें", is_hi), vendor_names, key="chosen_lead_vendor")
-        cust_phone = st.text_input(tr("Your Mobile Number", "आपका मोबाइल नंबर", is_hi), placeholder="e.g. 98XXXXXXXX", key="lead_phone")
+        cust_phone = st.text_input(
+            tr("Your Mobile Number", "आपका मोबाइल नंबर", is_hi),
+            placeholder=tr("demo, not stored", "डेमो, संग्रहीत नहीं किया जाता", is_hi),
+            key="lead_phone",
+        )
         share_consent = st.checkbox(
             tr(
                 "I consent to share my system size estimate and uploaded rooftop photo strictly with the selected installer for a site quote.",
@@ -721,10 +773,10 @@ with tab2:
             elif not share_consent:
                 st.warning(tr("Please tick the consent box before sharing your details.", "विवरण साझा करने से पहले सहमति बॉक्स पर टिक करें।", is_hi))
             else:
-                st.success(
+                st.info(
                     tr(
-                        f"✅ Request logged for **{chosen_vendor}** ({area_label}). Your {res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'} estimate has been queued for callback.",
-                        f"✅ **{chosen_vendor}** ({area_label}) के लिए अनुरोध दर्ज कर लिया गया है।",
+                        "ℹ️ Demo only: nothing was sent or stored.",
+                        "ℹ️ केवल डेमो: कुछ भी भेजा या संग्रहीत नहीं किया गया है।",
                         is_hi,
                     )
                 )
@@ -814,9 +866,20 @@ with tab4:
     draft_letter = build_letter(res, app_name, app_id, app_addr, is_hi)
     if st.checkbox(f"✨ {tr('Polish language with Gemini AI (preserves all figures)', 'Gemini AI से भाषा परिष्कृत करें', is_hi)}", value=False):
         if api_key and not demo_mode:
-            draft_letter = polish_letter(api_key, engine_choice, draft_letter, lang)
+            polished, ok = polish_letter(api_key, engine_choice, draft_letter, lang)
+            if ok:
+                draft_letter = polished
+            else:
+                st.warning(
+                    tr(
+                        "⚠️ Could not polish letter with Gemini AI right now; showing standard template draft.",
+                        "⚠️ अभी Gemini AI से पत्र परिष्कृत नहीं हो सका; मानक टेम्पलेट ड्राफ्ट दिखाया जा रहा है।",
+                        is_hi,
+                    )
+                )
 
-    st.markdown(f'<div class="paper-letter">{draft_letter.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+    safe_letter_html = html.escape(draft_letter).replace("\n", "<br>")
+    st.markdown(f'<div class="paper-letter">{safe_letter_html}</div>', unsafe_allow_html=True))
     st.download_button(
         f"📥 {tr('Download Official Letter (.txt)', 'आधिकारिक पत्र डाउनलोड करें (.txt)', is_hi)}",
         data=draft_letter,
@@ -854,9 +917,10 @@ with tab5:
                     is_hi,
                 )
                 st.markdown(ans)
-            else:
+           else:
                 sys_qa = (
                     f"You are UrjaMitra, an expert Indian solar, agricultural land (Khasra/Khatauni), and DISCOM policy copilot for {state} ({st_info['discom']}). "
+                    f"Never invent subsidy figures or vendor names; if unsure, tell the user to verify with their DISCOM or pmsuryaghar.gov.in. "
                     f"Answer clearly and concisely in {'Hindi (Devanagari)' if is_hi else 'English'}."
                 )
                 ans, q_metrics = run_llm(
