@@ -157,4 +157,48 @@ def run_llm(
             total = time.perf_counter() - t0
             usage = getattr(resp, "usage_metadata", None)
             in_tok = getattr(usage, "prompt_token_count", 0) or 0
-            out_tok = getattr(usage, "candidates_token_count", 0)
+            out_tok = getattr(usage, "candidates_token_count", 0) or 0
+            tot_tok = getattr(usage, "total_token_count", 0) or (in_tok + out_tok)
+            saved = max(0, round((1 - tot_tok / CFG["baseline_tokens"]) * 100)) if tot_tok else 0
+            return text, {
+                "model": model_name,
+                "ttft": round(total, 2),
+                "total": round(total, 2),
+                "in_tok": in_tok,
+                "out_tok": out_tok,
+                "tot_tok": tot_tok,
+                "saved_pct": saved,
+            }
+        except Exception as e:
+            status.empty()
+            last_err = e
+
+    st.error(f"❌ {friendly_error(last_err)}")
+    return None, None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def polish_letter(api_key: str, engine_choice: str, draft: str, lang: str) -> str:
+    """Polishes formal DISCOM / State agency application letter."""
+    sys_p = (
+        f"You are an Indian regulatory correspondence editor. Rewrite the letter in crisp formal "
+        f"{'Hindi (Devanagari)' if lang == 'Hindi' else 'English'}. "
+        f"Preserve EVERY number, kW, HP, ₹ amount, state, agency and applicant name verbatim. "
+        f"Output ONLY the letter text with no commentary."
+    )
+    found = list_models(api_key)
+    models = (
+        [engine_choice] + [m for m in found if m != engine_choice][:3]
+        if engine_choice != AUTO
+        else found[:4]
+    )
+    cfg = _gen_config(sys_p, 650)
+    client = get_client(api_key)
+    for m in models:
+        try:
+            r = _call_with_timeout(client, m, draft, cfg, timeout_sec=6)
+            if r.text:
+                return r.text.strip()
+        except Exception:
+            continue
+    return draft
