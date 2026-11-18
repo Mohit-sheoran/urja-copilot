@@ -1,7 +1,7 @@
 """UrjaMitra (ऊर्जा मित्र) — Modular Streamlit Entry Point."""
 
+import math
 import urllib.parse
-import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from core.config import AUTO, CFG, STATE_DB, tr
+from core.config import AUTO, STATE_DB, tr
 from core.styles import H, inject_css
 from core.solar_engine import build_bom, build_letter, calc_pump, calc_rooftop
 from core.ai_layer import (
@@ -34,6 +34,18 @@ def _get_crustdata_token() -> str:
     except Exception:
         pass
     return ""
+
+
+def _fmt_lakh(val: float, is_hi: bool) -> str:
+    """Format INR value in Indian Lakhs (e.g., ₹2L or ₹2 लाख)."""
+    if val == 0:
+        return "₹0"
+    lakhs = val / 100000.0
+    sign = "-" if lakhs < 0 else ""
+    abs_l = abs(lakhs)
+    num_str = f"{abs_l:g}" if abs_l >= 1 else f"{abs_l:.1f}"
+    unit = " लाख" if is_hi else "L"
+    return f"{sign}₹{num_str}{unit}"
 
 
 def _render_eff(m: dict):
@@ -127,17 +139,21 @@ with st.sidebar:
 
     with st.expander(f"🧠 {tr('AI engine & efficiency', 'AI इंजन और दक्षता', is_hi)}", expanded=False):
         demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False)
-        smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=True)
+        smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False)
         model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"])
         engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)
 
 # ---------------------------------------------------------
 # 3. Deterministic Calculation & KPI Strip
 # ---------------------------------------------------------
-res = calc_rooftop(state, bill, roof_sqft, sanc_kw, quote) if is_rooftop else calc_pump(state, hp, pump_type, depth_ft, diesel_l, quote)
+res = calc_rooftop(state, bill, roof_sqft, sanc_kw, quote, is_hi=is_hi) if is_rooftop else calc_pump(state, hp, pump_type, depth_ft, diesel_l, quote)
 st_info = res["st"]
 
-scheme_tag = "PM Surya Ghar Muft Bijli Yojana" if is_rooftop else "PM-KUSUM Component-B"
+scheme_tag = (
+    tr("PM Surya Ghar Muft Bijli Yojana", "पीएम सूर्य घर: मुफ्त बिजली योजना", is_hi)
+    if is_rooftop
+    else tr("PM-KUSUM Component-B", "पीएम-कुसुम (घटक-B)", is_hi)
+)
 H(
     f"""
     <div class="info-strip">
@@ -151,20 +167,28 @@ H(
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    val = f"{res['rec_kw']:g} kW Rooftop" if is_rooftop else f"{res['hp']:g} HP ({res['array_kwp']} kWp)"
-    sub = f"⚡ ~{res['daily_units']} units/day · {res['offset_pct']}% of usage" if is_rooftop else f"💧 {res['head_m']}m head · {res['pump_type']} pump"
+    val = (
+        f"{res['rec_kw']:g} kW {tr('Rooftop', 'रूफटॉप', is_hi)}"
+        if is_rooftop
+        else f"{res['hp']:g} HP ({res['array_kwp']} kWp)"
+    )
+    sub = (
+        f"⚡ ~{res['daily_units']} {tr('units/day', 'यूनिट/दिन', is_hi)} · {res['offset_pct']}% {tr('of usage', 'खपत की पूर्ति', is_hi)}"
+        if is_rooftop
+        else f"💧 {res['head_m']}m {tr('head', 'हेड', is_hi)} · {res['pump_type']} {tr('pump', 'पंप', is_hi)}"
+    )
     H(f'<div class="kpi-card"><div class="kpi-title">{tr("RECOMMENDED SYSTEM", "अनुशंसित क्षमता", is_hi)}</div><p class="kpi-value">{val}</p><div class="kpi-sub">{sub}</div></div>')
 
 with c2:
-    sub2 = tr("Central MNRE direct DBT", "केंद्रीय MNRE प्रत्यक्ष DBT", is_hi) if is_rooftop else f"30% Central + {st_info['kusum_state_sub']}% State"
+    sub2 = tr("Central MNRE direct DBT", "केंद्रीय MNRE प्रत्यक्ष DBT", is_hi) if is_rooftop else tr(f"30% Central + {st_info['kusum_state_sub']}% State", f"30% केंद्र + {st_info['kusum_state_sub']}% राज्य", is_hi)
     H(f'<div class="kpi-card green"><div class="kpi-title">{tr("EST. GOVT SUBSIDY", "अनुमानित सरकारी सब्सिडी", is_hi)}</div><p class="kpi-value">₹{res["sub"]:,}</p><div class="kpi-sub">🏛️ {sub2}</div></div>')
 
 with c3:
-    H(f'<div class="kpi-card blue"><div class="kpi-title">{tr("EST. NET INVESTMENT", "अनुमानित शुद्ध निवेश", is_hi)}</div><p class="kpi-value">₹{res["net"]:,}</p><div class="kpi-sub">💰 Benchmark ₹{res["bench"]:,}</div></div>')
+    H(f'<div class="kpi-card blue"><div class="kpi-title">{tr("EST. NET INVESTMENT", "अनुमानित शुद्ध निवेश", is_hi)}</div><p class="kpi-value">₹{res["net"]:,}</p><div class="kpi-sub">💰 {tr("Benchmark", "मानक लागत", is_hi)} ₹{res["bench"]:,}</div></div>')
 
 with c4:
-    pb_txt = f"{res['payback']} Years" if res["payback"] < 50 else "N/A"
-    H(f'<div class="kpi-card purple"><div class="kpi-title">{tr("EST. PAYBACK", "अनुमानित पेबैक", is_hi)}</div><p class="kpi-value">{pb_txt}</p><div class="kpi-sub">🌱 ₹{res["save_yr1"]:,}/yr · {res["co2_yr"]}T CO₂</div></div>')
+    pb_txt = f"{res['payback']} {tr('Years', 'वर्ष', is_hi)}" if res["payback"] < 50 else "N/A"
+    H(f'<div class="kpi-card purple"><div class="kpi-title">{tr("EST. PAYBACK", "अनुमानित पेबैक", is_hi)}</div><p class="kpi-value">{pb_txt}</p><div class="kpi-sub">🌱 ₹{res["save_yr1"]:,}/{tr("yr", "वर्ष", is_hi)} · {res["co2_yr"]}T CO₂</div></div>')
 
 if is_rooftop:
     st.info(
@@ -177,7 +201,13 @@ if is_rooftop:
     )
     st.caption(f"ℹ️ {res['load_note']}")
 elif res["hp"] < res["min_hp"]:
-    st.warning(f"⚠️ {res['depth_ft']} ft depth ({res['head_m']}m head) typically requires at least a **{res['min_hp']} HP** pump.")
+    st.warning(
+        tr(
+            f"⚠️ {res['depth_ft']} ft depth ({res['head_m']}m head) typically requires at least a **{res['min_hp']} HP** pump.",
+            f"⚠️ {res['depth_ft']} फीट गहराई ({res['head_m']}m हेड) के लिए आमतौर पर कम से कम **{res['min_hp']} HP** पंप की आवश्यकता होती है।",
+            is_hi,
+        )
+    )
 
 # WhatsApp Summary Share
 wa_msg = (
@@ -210,7 +240,7 @@ with tab1:
     with v_col1:
         vendor_name = st.text_input(
             tr("Installer Company Name", "इंस्टॉलर कंपनी का नाम", is_hi),
-            placeholder="e.g. Tata Power Solar, Loom Solar, Waaree, Vikram Solar",
+            placeholder=tr("e.g. Tata Power Solar, Loom Solar, Waaree, Vikram Solar", "जैसे: Tata Power Solar, Loom Solar, Waaree", is_hi),
             key="vendor_input",
         )
     with v_col2:
@@ -219,67 +249,104 @@ with tab1:
 
     if verify_clicked and vendor_name.strip():
         if not crustdata_token:
-            st.info("ℹ️ Add `CRUSTDATA_API_TOKEN` in Streamlit Secrets to enable live B2B vendor screening.")
+            st.info(tr("ℹ️ Add `CRUSTDATA_API_TOKEN` in Streamlit Secrets to enable live B2B vendor screening.", "ℹ️ लाइव B2B वेंडर जांच के लिए Streamlit Secrets में `CRUSTDATA_API_TOKEN` जोड़ें।", is_hi))
         else:
-            with st.spinner("Querying Crustdata corporate registry..."):
+            with st.spinner(tr("Querying Crustdata corporate registry...", "Crustdata कॉर्पोरेट रजिस्ट्री की जांच हो रही है...", is_hi)):
                 v_res = verify_epc_vendor(vendor_name, crustdata_token)
             if v_res and v_res.get("found"):
                 H(
                     f"""
                     <div class="info-strip" style="border-left-color:#059669;background:#F0FDF4;">
-                      <b style="color:#047857;font-size:1rem;">🛡️ Verified Solar EPC Entity (Crustdata Verified)</b>
+                      <b style="color:#047857;font-size:1rem;">🛡️ {tr("Verified Solar EPC Entity (Crustdata Verified)", "सत्यापित सोलर EPC कंपनी (Crustdata द्वारा प्रमाणित)", is_hi)}</b>
                       <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.7;">
-                        <li><b>Entity Name:</b> {v_res['name']}</li>
-                        <li><b>Web Presence:</b> <a href="{v_res['domain'] if str(v_res['domain']).startswith('http') else 'https://' + str(v_res['domain'])}" target="_blank">{v_res['domain']}</a></li>
-                        <li><b>Operational Scale:</b> {v_res['headcount']}</li>
-                        <li><b>Jurisdiction:</b> {v_res['location']}</li>
-                        <li><b>Risk Assessment:</b> Active registered entity. Low risk of vendor abandonment prior to net-metering sign-off.</li>
+                        <li><b>{tr("Entity Name:", "कंपनी का नाम:", is_hi)}</b> {v_res['name']}</li>
+                        <li><b>{tr("Web Presence:", "वेबसाइट:", is_hi)}</b> <a href="{v_res['domain'] if str(v_res['domain']).startswith('http') else 'https://' + str(v_res['domain'])}" target="_blank">{v_res['domain']}</a></li>
+                        <li><b>{tr("Operational Scale:", "कार्य स्तर:", is_hi)}</b> {v_res['headcount']}</li>
+                        <li><b>{tr("Jurisdiction:", "क्षेत्राधिकार:", is_hi)}</b> {v_res['location']}</li>
+                        <li><b>{tr("Risk Assessment:", "जोखिम मूल्यांकन:", is_hi)}</b> {tr("Active registered entity. Low risk of vendor abandonment prior to net-metering sign-off.", "सक्रिय पंजीकृत कंपनी। नेट-मीटरिंग से पहले काम अधूरा छोड़ने का जोखिम बहुत कम है।", is_hi)}</li>
                       </ul>
                     </div>
                     """
                 )
             else:
                 st.warning(
-                    f"⚠️ **Unverified / Local Contractor Alert:** No institutional B2B footprint found for `{vendor_name}` on Crustdata. "
-                    f"Ensure your contract mandates milestone-based payments (withhold 20% until DISCOM commissioning and joint inspection)."
+                    tr(
+                        f"⚠️ **Unverified / Local Contractor Alert:** No institutional B2B footprint found for `{vendor_name}` on Crustdata. Ensure your contract mandates milestone-based payments (withhold 20% until DISCOM commissioning and joint inspection).",
+                        f"⚠️ **असत्यापित / स्थानीय ठेकेदार चेतावनी:** `{vendor_name}` का संस्थागत B2B रिकॉर्ड Crustdata पर नहीं मिला। अनुबंध में चरणबद्ध भुगतान सुनिश्चित करें (DISCOM कमीशनिंग तक 20% राशि रोक कर रखें)।",
+                        is_hi,
+                    )
                 )
 
     st.divider()
     st.subheader(f"🛣️ {tr('Subsidy & Installation Roadmap', 'सब्सिडी और स्थापना रोडमैप', is_hi)} · {scheme_tag}")
     H(
-        """
+        f"""
         <div class="stepper-container">
-          <div class="step-item"><div class="step-num">1</div><div class="step-title">Portal registration</div><div class="step-desc">Register on pmsuryaghar.gov.in with consumer details.</div></div>
-          <div class="step-item"><div class="step-num">2</div><div class="step-title">DISCOM feasibility</div><div class="step-desc">Apply online to the local utility for grid approval.</div></div>
-          <div class="step-item"><div class="step-num">3</div><div class="step-title">Vendor installation</div><div class="step-desc">Install through an MNRE-empanelled vendor.</div></div>
-          <div class="step-item"><div class="step-num">4</div><div class="step-title">Net-meter inspection</div><div class="step-desc">Utility inspects the site and fits a bi-directional meter.</div></div>
-          <div class="step-item"><div class="step-num">5</div><div class="step-title">Subsidy via DBT</div><div class="step-desc">Subsidy is credited directly to your bank account.</div></div>
+          <div class="step-item"><div class="step-num">1</div><div class="step-title">{tr("Portal registration", "पोर्टल पंजीकरण", is_hi)}</div><div class="step-desc">{tr("Register on pmsuryaghar.gov.in with consumer details.", "उपभोक्ता विवरण के साथ pmsuryaghar.gov.in पर पंजीकरण करें।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">2</div><div class="step-title">{tr("DISCOM feasibility", "DISCOM व्यवहार्यता", is_hi)}</div><div class="step-desc">{tr("Apply online to the local utility for grid approval.", "ग्रिड स्वीकृति के लिए स्थानीय विद्युत विभाग में ऑनलाइन आवेदन करें।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">3</div><div class="step-title">{tr("Vendor installation", "वेंडर द्वारा स्थापना", is_hi)}</div><div class="step-desc">{tr("Install through an MNRE-empanelled vendor.", "MNRE-पंजीकृत वेंडर के माध्यम से सोलर संयंत्र लगवाएं।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">4</div><div class="step-title">{tr("Net-meter inspection", "नेट-मीटर निरीक्षण", is_hi)}</div><div class="step-desc">{tr("Utility inspects the site and fits a bi-directional meter.", "विभाग साइट का निरीक्षण कर द्वि-दिशात्मक मीटर लगाता है।", is_hi)}</div></div>
+          <div class="step-item"><div class="step-num">5</div><div class="step-title">{tr("Subsidy via DBT", "DBT द्वारा सब्सिडी", is_hi)}</div><div class="step-desc">{tr("Subsidy is credited directly to your bank account.", "सब्सिडी सीधे आपके बैंक खाते में जमा की जाती है।", is_hi)}</div></div>
         </div>
         """
     )
 
     st.subheader(f"🔍 {tr('Deterministic Quote Audit', 'तत्काल कोटेशन ऑडिट', is_hi)}")
     if res["verdict"] == "NO_QUOTE":
-        st.info(f"💡 Benchmark cost is **₹{res['bench']:,}** (Net **₹{res['net']:,}** after subsidy). Enter an installer quote in the sidebar to audit pricing.")
+        st.info(
+            tr(
+                f"💡 Benchmark cost is **₹{res['bench']:,}** (Net **₹{res['net']:,}** after subsidy). Enter an installer quote in the sidebar to audit pricing.",
+                f"💡 मानक लागत **₹{res['bench']:,}** है (सब्सिडी के बाद शुद्ध **₹{res['net']:,}**)। कीमत की जांच के लिए साइडबार में वेंडर का कोटेशन दर्ज करें।",
+                is_hi,
+            )
+        )
     elif res["verdict"] == "OVERPRICED":
-        st.error(f"🚨 **Overpriced Quote (+{res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,} (+₹{res['diff']:,}). Negotiate or request itemized DCR module & inverter quotes.")
+        st.error(
+            tr(
+                f"🚨 **Overpriced Quote (+{res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,} (+₹{res['diff']:,}). Negotiate or request itemized DCR module & inverter quotes.",
+                f"🚨 **अत्यधिक महंगा कोटेशन (+{res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,} (+₹{res['diff']:,})। मोलभाव करें या DCR मॉड्यूल और इनवर्टर का अलग-अलग विवरण मांगें।",
+                is_hi,
+            )
+        )
     elif res["verdict"] == "SUSPICIOUSLY_LOW":
-        st.warning(f"⚠️ **Unusually Low Quote ({res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,}. Verify ALMM/DCR panel certificates and GI structure thickness (≥80 µm).")
+        st.warning(
+            tr(
+                f"⚠️ **Unusually Low Quote ({res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,}. Verify ALMM/DCR panel certificates and GI structure thickness (≥80 µm).",
+                f"⚠️ **असामान्य रूप से कम कोटेशन ({res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,}। ALMM/DCR पैनल प्रमाणपत्र और GI स्ट्रक्चर की मोटाई (≥80 µm) अवश्य जांचें।",
+                is_hi,
+            )
+        )
     else:
-        st.success(f"✅ **Fair Market Price ({res['diff_pct']:+}%):** Quoted ₹{res['quote']:,} aligns closely with the ₹{res['bench']:,} benchmark.")
+        st.success(
+            tr(
+                f"✅ **Fair Market Price ({res['diff_pct']:+}%):** Quoted ₹{res['quote']:,} aligns closely with the ₹{res['bench']:,} benchmark.",
+                f"✅ **उचित बाजार मूल्य ({res['diff_pct']:+}%):** कोटेशन ₹{res['quote']:,} मानक लागत ₹{res['bench']:,} के अनुरूप है।",
+                is_hi,
+            )
+        )
 
     st.subheader(f"✨ {tr('AI Engineering & Quote Insights', 'AI इंजीनियरिंग और कोटेशन विश्लेषण', is_hi)}")
     if st.button(f"🚀 {tr('Generate AI Insights & OCR Audit', 'AI विश्लेषण और OCR ऑडिट चलाएँ', is_hi)}"):
         should_skip = smart_skip and uploaded_img is None and res["verdict"] in ("NO_QUOTE", "FAIR")
         if demo_mode or should_skip:
-            reason = "Demo mode active" if demo_mode else "Smart-skip saved tokens (no quote anomaly or image uploaded)"
-            st.success(f"⚡ **{reason}:** System sizing ({res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}), ₹{res['sub']:,} subsidy, and {res['payback']}-yr payback are already verified deterministically.")
+            reason = (
+                tr("Demo mode active", "डेमो मोड सक्रिय है", is_hi)
+                if demo_mode
+                else tr("Smart-skip saved tokens (no quote anomaly or image uploaded)", "स्मार्ट-स्किप ने टोकन बचाए (कोई असामान्य कीमत या फोटो नहीं है)", is_hi)
+            )
+            st.success(
+                tr(
+                    f"⚡ **{reason}:** System sizing ({res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}), ₹{res['sub']:,} subsidy, and {res['payback']}-yr payback are already verified deterministically.",
+                    f"⚡ **{reason}:** सिस्टम क्षमता ({res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}), ₹{res['sub']:,} सब्सिडी, और {res['payback']}-वर्षीय पेबैक पहले ही सटीक रूप से सत्यापित हैं।",
+                    is_hi,
+                )
+            )
         elif not api_key:
-            st.warning("Add `GEMINI_API_KEY` in Streamlit Secrets to run AI analysis.")
+            st.warning(tr("Add `GEMINI_API_KEY` in Streamlit Secrets to run AI analysis.", "AI विश्लेषण चलाने के लिए Streamlit Secrets में `GEMINI_API_KEY` जोड़ें।", is_hi))
         else:
             img_part = prepare_image(uploaded_img)
             sys_p = (
-                f"You are a senior Indian solar regulatory engineer. Respond in {'Hindi' if is_hi else 'English'} using 4 crisp bullet points. "
+                f"You are a senior Indian solar regulatory engineer. Respond strictly in {'Hindi (Devanagari)' if is_hi else 'English'} using 4 crisp bullet points. "
                 f"Never alter the pre-computed numbers: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net ₹{res['net']:,}."
             )
             usr_p = (
@@ -294,29 +361,62 @@ with tab1:
 # --- TAB 2: 25-Year ROI & Bill of Materials ---
 with tab2:
     st.subheader(f"📈 {tr('25-Year Cumulative Cashflow Projection', '25-वर्षीय संचयी नकदी प्रवाह अनुमान', is_hi)}")
+
+    # Build Indian Lakh axis ticks dynamically
+    y_min = min(res["cum"])
+    y_max = max(res["cum"])
+    span = max(100000, y_max - y_min)
+    step = 100000 if span <= 600000 else (200000 if span <= 1500000 else 500000)
+    start_tick = math.floor(y_min / step) * step
+    end_tick = math.ceil(y_max / step) * step
+    tick_vals = list(range(int(start_tick), int(end_tick) + step, step))
+    if 0 not in tick_vals:
+        tick_vals = sorted(tick_vals + [0])
+    tick_texts = [_fmt_lakh(v, is_hi) for v in tick_vals]
+    hover_texts = [
+        f"{tr('Year', 'वर्ष', is_hi)} {yr}: ₹{val:,} ({_fmt_lakh(val, is_hi)})"
+        for yr, val in zip(res["years"], res["cum"])
+    ]
+
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
             x=res["years"],
             y=res["cum"],
             mode="lines+markers",
-            name="Cumulative Cashflow (₹)",
+            name=tr("Cumulative Cashflow", "संचयी नकदी प्रवाह", is_hi),
+            text=hover_texts,
+            hoverinfo="text",
             line=dict(color="#059669", width=3),
             fill="tozeroy",
             fillcolor="rgba(5, 150, 105, 0.12)",
         )
     )
-    fig.add_hline(y=0, line_dash="dash", line_color="#64748B", annotation_text="Break-Even")
+    fig.add_hline(
+        y=0,
+        line_dash="dash",
+        line_color="#64748B",
+        annotation_text=tr("Break-Even", "लागत वसूली (Break-Even)", is_hi),
+    )
     fig.update_layout(
         xaxis_title=tr("Year", "वर्ष", is_hi),
-        yaxis_title=tr("Net Cashflow (₹)", "शुद्ध नकदी प्रवाह (₹)", is_hi),
+        yaxis_title=tr("Net Cashflow (₹ in Lakhs)", "शुद्ध नकदी प्रवाह (₹ लाख में)", is_hi),
+        yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_texts),
         height=370,
         margin=dict(l=20, r=20, t=20, b=20),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, use_container_width=True)
-    st.caption(f"💰 **{tr('25-Year Net Profit:', '25-वर्षीय शुद्ध लाभ:', is_hi)}** ₹{res['net_25yr']:,} (Gross savings ₹{res['total_gross']:,} minus ₹{res['net']:,} net investment)")
+    st.caption(
+        f"💰 **{tr('25-Year Net Profit:', '25-वर्षीय शुद्ध लाभ:', is_hi)}** "
+        f"₹{res['net_25yr']:,} ({_fmt_lakh(res['net_25yr'], is_hi)}) · "
+        + tr(
+            f"Gross savings ₹{res['total_gross']:,} minus ₹{res['net']:,} net investment",
+            f"कुल बचत ₹{res['total_gross']:,} घटाव ₹{res['net']:,} शुद्ध निवेश",
+            is_hi,
+        )
+    )
 
     st.subheader(f"🛠️ {tr('Standard Bill of Materials (BoM)', 'मानक उपकरण सूची (BoM)', is_hi)}")
     bom_rows = build_bom(res, is_hi)
@@ -364,7 +464,13 @@ with tab4:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    user_q = st.chat_input(tr("Ask about net-metering, DCR panels, loans, or subsidy rules...", "नेट-मीटरिंग, DCR पैनल, लोन या सब्सिडी नियमों के बारे में पूछें...", is_hi))
+    user_q = st.chat_input(
+        tr(
+            "Ask about net-metering, DCR panels, Khasra no., loans, or subsidy rules...",
+            "नेट-मीटरिंग, DCR पैनल, खसरा नंबर, लोन या सब्सिडी नियमों के बारे में पूछें...",
+            is_hi,
+        )
+    )
     if user_q:
         st.session_state.chat_history.append({"role": "user", "content": user_q})
         with st.chat_message("user"):
@@ -372,23 +478,31 @@ with tab4:
 
         with st.chat_message("assistant"):
             if demo_mode or not api_key:
-                ans = f"For {state} ({st_info['discom']}), ensure your installer uses ALMM-listed DCR modules and submits net-metering feasibility via pmsuryaghar.gov.in."
+                ans = tr(
+                    f"For {state} ({st_info['discom']}), ensure your installer uses ALMM-listed DCR modules and submits net-metering feasibility via pmsuryaghar.gov.in.",
+                    f"{state} ({st_info['discom']}) के लिए सुनिश्चित करें कि वेंडर ALMM-सूचीबद्ध DCR मॉड्यूल का उपयोग करे और pmsuryaghar.gov.in के माध्यम से आवेदन करे।",
+                    is_hi,
+                )
                 st.markdown(ans)
             else:
                 sys_qa = (
-                    f"You are UrjaMitra, an expert Indian solar & DISCOM policy copilot for {state} ({st_info['discom']}). "
-                    f"Answer concisely in {'Hindi' if is_hi else 'English'}."
+                    f"You are UrjaMitra, an expert Indian solar, agricultural land (Khasra/Khatauni), and DISCOM policy copilot for {state} ({st_info['discom']}). "
+                    f"Answer clearly and concisely in {'Hindi (Devanagari)' if is_hi else 'English'}."
                 )
-                ans, q_metrics = run_llm(api_key, engine_choice, sys_qa, user_q, max_tokens=400, stream=True)
+                ans, q_metrics = run_llm(api_key, engine_choice, sys_qa, user_q, max_tokens=450, stream=False)
                 if q_metrics:
                     _render_eff(q_metrics)
             if ans:
                 st.session_state.chat_history.append({"role": "assistant", "content": ans})
 
 H(
-    """
+    f"""
     <div class="app-footer">
-      ⚠️ <b>Disclaimer:</b> Estimates are for informational guidance only. Verify exact subsidy slabs, net-metering rules, and vendor empanelment on <b>pmsuryaghar.gov.in</b> or your state DISCOM portal.
+      ⚠️ <b>{tr("Disclaimer:", "अस्वीकरण:", is_hi)}</b> {tr(
+          "Estimates are for informational guidance only. Verify exact subsidy slabs, net-metering rules, and vendor empanelment on pmsuryaghar.gov.in or your state DISCOM portal.",
+          "ये अनुमान केवल जानकारी के मार्गदर्शन हेतु हैं। सटीक सब्सिडी स्लैब, नेट-मीटरिंग नियमों और वेंडर पंजीकरण की पुष्टि pmsuryaghar.gov.in या अपने राज्य के DISCOM पोर्टल पर अवश्य करें।",
+          is_hi,
+      )}
     </div>
     """
 )
