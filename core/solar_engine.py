@@ -121,11 +121,10 @@ def calc_pump(
     - 'DIESEL_B': Off-Grid Diesel Pump Replacement (PM-KUSUM Component-B)
     - 'NEW_BORE_B': New Borewell / Unconnected Farm avoiding grid extension (PM-KUSUM Component-B)
     """
-   st_info = STATE_DB[state]
+    st_info = STATE_DB[state]
     insol = st_info["insolation"]
     head_m = round(depth_ft * 0.3048, 1)
     min_hp = 3 if head_m <= 25 else (5 if head_m <= 45 else (7.5 if head_m <= 70 else 10))
-    # High-head factor: deeper water (>100 ft) increases motor load & pumping time
     depth_factor = round(min(1.35, max(0.85, 0.85 + (depth_ft / 600.0))), 2)
 
     c_pct = st_info["central_kusum_pct"]
@@ -142,7 +141,6 @@ def calc_pump(
         eff_cost = quote if quote > 0 else bench
         net = max(0, eff_cost - sub)
 
-        # Deeper borewells draw higher self-consumption kWh, leaving less surplus to export
         gen_yr1 = array_kwp * insol * 365 * 0.80
         pump_kw = hp * 0.746
         self_use_kwh = min(gen_yr1 * 0.85, pump_kw * usage_val * 220 * depth_factor)
@@ -151,7 +149,7 @@ def calc_pump(
         bill_saved = self_use_kwh * st_info["agri_tariff"]
         export_income = export_kwh * st_info["fit_rate"]
         gross_save_yr1 = round(bill_saved + export_income)
-        annual_om = round(bench * 0.012)  # 1.2% annual cleaning & net-meter upkeep
+        annual_om = round(bench * 0.012)
         net_save_yr1 = max(0, gross_save_yr1 - annual_om)
         co2_yr = round((gen_yr1 * CFG["grid_co2_kg_per_kwh"]) / 1000, 1)
 
@@ -162,11 +160,9 @@ def calc_pump(
         )
 
     elif irr_mode == "DIESEL_B":
-        # Component-B: Standalone solar pump replacing diesel engine (usage_val = monthly diesel litres)
         scheme_code = "PM-KUSUM Component-B (Off-Grid)"
         array_kwp = round(hp * CFG["array_kwp_per_hp"][pump_type], 2)
         bench = CFG["pump_cost_comp_b"][hp]
-        # MNRE subsidy capped at 7.5 HP benchmark
         sub_eligible_cost = min(bench, CFG["pump_cost_comp_b"][7.5])
         c_sub = round(sub_eligible_cost * c_pct / 100)
         s_sub = round(sub_eligible_cost * s_pct / 100)
@@ -175,7 +171,7 @@ def calc_pump(
         net = max(0, eff_cost - sub)
 
         diesel_saved_yr = usage_val * st_info["diesel_price"] * 12
-        engine_maint_saved = 9000  # Avoided diesel engine oil/filter/overhaul cost
+        engine_maint_saved = 9000
         gross_save_yr1 = round(diesel_saved_yr + engine_maint_saved)
         annual_om = round(bench * 0.015)
         net_save_yr1 = max(0, gross_save_yr1 - annual_om)
@@ -188,7 +184,6 @@ def calc_pump(
         )
 
     else:
-        # NEW_BORE_B: New tubewell avoiding new grid transformer/line extension + rented water/generator
         scheme_code = "PM-KUSUM Component-B (New Tubewell)"
         array_kwp = round(hp * CFG["array_kwp_per_hp"][pump_type], 2)
         bench = CFG["pump_cost_comp_b"][hp]
@@ -197,10 +192,8 @@ def calc_pump(
         s_sub = round(sub_eligible_cost * s_pct / 100)
         sub = c_sub + s_sub
         eff_cost = quote if quote > 0 else bench
-        # Avoided dedicated transformer / pole line connection cost (~₹1.6L typical for new AP connection)
         net = max(0, eff_cost - sub)
 
-        # usage_val = monthly rented water / generator irrigation expense (₹/month)
         gross_save_yr1 = round(usage_val * 12)
         annual_om = round(bench * 0.015)
         net_save_yr1 = max(0, gross_save_yr1 - annual_om)
