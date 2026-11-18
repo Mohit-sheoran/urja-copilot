@@ -917,7 +917,7 @@ with tab5:
                     is_hi,
                 )
                 st.markdown(ans)
-           else:
+            else:
                 sys_qa = (
                     f"You are UrjaMitra, an expert Indian solar, agricultural land (Khasra/Khatauni), and DISCOM policy copilot for {state} ({st_info['discom']}). "
                     f"Never invent subsidy figures or vendor names; if unsure, tell the user to verify with their DISCOM or pmsuryaghar.gov.in. "
