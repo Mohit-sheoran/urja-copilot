@@ -676,21 +676,25 @@ with tab2:
                     }
                 else:
                     roof_part = prepare_image(active_roof_img)
-                    sys_roof = (
-                        f"You are an Indian solar site-survey engineer. Inspect this rooftop image and respond in {'Hindi (Devanagari)' if is_hi else 'English'} "
-                        f"with 3 concise bullet points covering: (1) Visible shading obstacles (water tanks, trees, parapet walls, neighboring buildings), "
-                        f"(2) Recommended panel mounting height/placement, and (3) Any civil/safety precautions."
-                    )
-                    r_txt, r_met = run_llm(
-                        api_key,
-                        engine_choice,
-                        sys_roof,
-                        "Analyze this rooftop for solar PV installation.",
-                        image_part=roof_part,
-                        max_tokens=350,
-                        stream=False,
-                        render_inline=False,
-                    )
+                    roof_part = prepare_image(active_roof_img)
+                 sys_roof = (
+                     f"You are a senior Indian rooftop solar site-survey engineer assessing this roof in {state}. "
+                     f"Inspect this rooftop image and respond in {'Hindi (Devanagari)' if is_hi else 'English'} with 4 concise bullet points (no intro paragraph) covering:\n"
+                     f"1. **Estimated Plant Capacity:** Visually estimate the shadow-free usable roof area and approximate solar plant capacity range (kW) that can fit here (using ~100 sq. ft. per kW; note this is a visual estimate requiring physical tape measurement).\n"
+                     f"2. **Shading Obstacles:** Identify specific objects visible in the photo (chimneys, parapet walls, water tanks, trees, adjacent structures) and how they cast shadows.\n"
+                     f"3. **Site Difficulties & Constraints:** Highlight practical installation challenges visible here (e.g., narrow layout, high parapet wind/shadow clearance, soot/dust near exhausts, waterproofing/pool proximity, or material access).\n"
+                     f"4. **Mounting & Civil Recommendations:** Recommend optimal tilt/orientation (south-facing), elevated structure height, and non-penetrative ballast or chemical anchoring."
+                 )
+                 r_txt, r_met = run_llm(
+                     api_key,
+                     engine_choice,
+                     sys_roof,
+                     "Analyze this rooftop for solar PV installation.",
+                     image_part=roof_part,
+                     max_tokens=480,
+                     stream=False,
+                     render_inline=False,
+                 )
                     if r_txt:
                         st.session_state["roof_vision_res"] = {
                             "is_sample": False,
