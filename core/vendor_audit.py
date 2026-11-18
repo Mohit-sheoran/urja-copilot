@@ -43,19 +43,22 @@ def _lookup_pincode_area(pin: str):
     if len(pin) != 6 or not pin.isdigit():
         return None
     try:
-        resp = requests.get(f"https://api.postalpincode.in/pincode/{pin}", timeout=2.5)
+        resp = requests.get(f"https://api.postalpincode.in/pincode/{pin}", timeout=5.0)
         resp.raise_for_status()
         payload = resp.json()
         if isinstance(payload, list) and payload and payload[0].get("Status") == "Success":
             offices = payload[0].get("PostOffice") or []
             if offices:
                 po = offices[0]
+                po_name = (po.get("Name") or "").strip()
                 block = (po.get("Block") or "").strip()
                 district = (po.get("District") or "").strip()
                 po_state = (po.get("State") or "").strip()
+
+                local = block if (block and block.upper() != "NA") else po_name
                 parts = []
-                if block and block.upper() != "NA" and block.lower() != district.lower():
-                    parts.append(block)
+                if local and local.lower() != district.lower():
+                    parts.append(local)
                 if district and district.upper() != "NA":
                     parts.append(district)
                 if po_state:
