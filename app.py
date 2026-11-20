@@ -84,6 +84,12 @@ PRESET_LABELS = {
     "overpriced": tr("Overpriced quote", "महंगा कोटेशन", is_hi),
     "farmer": tr("Rajasthan farmer", "राजस्थान किसान", is_hi),
 }
+PRESET_NOTES = {
+    "home": tr("4 kW rooftop · ₹2.03L quote", "4 kW रूफटॉप · ₹2.03L कोटेशन", is_hi),
+    "overpriced": tr("₹53k above MNRE benchmark", "MNRE मानक से ₹53k अधिक", is_hi),
+    "farmer": tr("7.5 HP PM-KUSUM · 180 ft bore", "7.5 HP PM-कुसुम · 180 फीट बोर", is_hi),
+}
+
 if "active_preset" not in st.session_state:
     st.session_state["active_preset"] = "custom"
 
@@ -125,6 +131,9 @@ with st.sidebar:
         st.rerun()
 
     p_key = st.session_state["active_preset"]
+    if p_key in PRESET_NOTES:
+        st.caption(PRESET_NOTES[p_key])
+
     is_preset_home = p_key in ("home", "overpriced")
     is_preset_farmer = p_key == "farmer"
 
@@ -336,11 +345,13 @@ else:
 
 if quote > 0:
     diff_bench = res["bench"] - quote
-    diff_note = (
-        tr(f"₹{diff_bench:,} below benchmark", f"मानक से ₹{diff_bench:,} कम", is_hi)
-        if diff_bench >= 0
-        else tr(f"₹{abs(diff_bench):,} above benchmark", f"मानक से ₹{abs(diff_bench):,} अधिक", is_hi)
-    )
+    if diff_bench >= 0:
+        diff_note = tr(f"₹{diff_bench:,} below benchmark", f"मानक से ₹{diff_bench:,} कम", is_hi)
+        pill_html = f'<span class="ledger-pill ok">{tr("Within benchmark", "मानक के भीतर", is_hi)}</span>'
+    else:
+        diff_note = tr(f"₹{abs(diff_bench):,} above benchmark", f"मानक से ₹{abs(diff_bench):,} अधिक", is_hi)
+        pill_html = f'<span class="ledger-pill warn">{tr("Above benchmark", "मानक से अधिक", is_hi)}</span>'
+
     top_cost_html = f"""
       <div class="ledger-row">
         <span class="lbl">{tr("Your installer&#39;s quote", "आपके वेंडर का कोटेशन", is_hi)}</span>
@@ -353,7 +364,13 @@ if quote > 0:
         <span>₹{res['bench']:,}</span>
       </div>
     """
+    basis_note = tr(
+        "Net cost calculated from your installer's quote minus estimated subsidy.",
+        "शुद्ध लागत आपके वेंडर के कोटेशन में से अनुमानित सब्सिडी घटाकर निकाली गई है।",
+        is_hi,
+    )
 else:
+    pill_html = f'<span class="ledger-pill ok">{tr("Benchmark estimate", "मानक अनुमान", is_hi)}</span>'
     top_cost_html = f"""
       <div class="ledger-row">
         <span class="lbl">{tr("Benchmark cost", "मानक लागत (बेंचमार्क)", is_hi)}</span>
@@ -361,11 +378,20 @@ else:
         <span class="amt">₹{res['bench']:,}</span>
       </div>
     """
+    basis_note = tr(
+        "Net cost calculated from MNRE benchmark cost minus estimated subsidy.",
+        "शुद्ध लागत MNRE मानक लागत में से अनुमानित सब्सिडी घटाकर निकाली गई है।",
+        is_hi,
+    )
 
 with led_col:
     H(
         f"""
         <div class="ledger">
+          <div class="ledger-head">
+            <span>{tr("Cost & subsidy receipt", "लागत और सब्सिडी रसीद", is_hi)}</span>
+            {pill_html}
+          </div>
           {top_cost_html}
           <div class="ledger-row">
             <span class="lbl">{tr("Government subsidy", "सरकारी सब्सिडी", is_hi)} ({html.escape(split_note)})</span>
@@ -376,6 +402,7 @@ with led_col:
             <span class="lbl">{tr("You pay", "आपका वास्तविक खर्च", is_hi)}</span>
             <span class="amt">₹{res['net']:,}</span>
           </div>
+          <div class="ledger-foot">{html.escape(basis_note)}</div>
         </div>
         """
     )
@@ -574,24 +601,24 @@ with tab1:
     elif res["verdict"] == "OVERPRICED":
         st.error(
             tr(
-                f"**Overpriced Quote (+{res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,} (+₹{res['diff']:,}). Negotiate or request itemized DCR module & inverter quotes.",
-                f"**अत्यधिक महंगा कोटेशन (+{res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,} (+₹{res['diff']:,})। मोलभाव करें या DCR मॉड्यूल और इनवर्टर का अलग-अलग विवरण मांगें।",
+                f"**Overpriced Quote (+{res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,} (+₹{res['diff']:,}). **Ask for:** itemized **DCR module** & **inverter** pricing, separate civil/BOS line items, and milestone-linked payment terms.",
+                f"**अत्यधिक महंगा कोटेशन (+{res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,} (+₹{res['diff']:,})। **जांचें:** **DCR मॉड्यूल** और **इनवर्टर** की अलग-अलग कीमत, सिविल/BOS विवरण और चरणबद्ध भुगतान।",
                 is_hi,
             )
         )
     elif res["verdict"] == "SUSPICIOUSLY_LOW":
         st.warning(
             tr(
-                f"**Unusually Low Quote ({res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,}. Verify ALMM/DCR panel certificates and GI structure thickness (≥80 µm).",
-                f"**असामान्य रूप से कम कोटेशन ({res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,}। ALMM/DCR पैनल प्रमाणपत्र और GI स्ट्रक्चर की मोटाई (≥80 µm) अवश्य जांचें।",
+                f"**Unusually Low Quote ({res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,}. **Verify:** **ALMM / DCR** certificates, hot-dip **GI structure** thickness (**≥80 µm**), and AC/DC surge protection & earthing.",
+                f"**असामान्य रूप से कम कोटेशन ({res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,}। **सत्यापित करें:** **ALMM / DCR** प्रमाणपत्र, **GI स्ट्रक्चर** की मोटाई (**≥80 µm**) और अर्थिंग/सर्ज सुरक्षा।",
                 is_hi,
             )
         )
     else:
         st.success(
             tr(
-                f"**Fair Market Price ({res['diff_pct']:+}%):** Quoted ₹{res['quote']:,} aligns closely with the ₹{res['bench']:,} benchmark.",
-                f"**उचित बाजार मूल्य ({res['diff_pct']:+}%):** कोटेशन ₹{res['quote']:,} मानक लागत ₹{res['bench']:,} के अनुरूप है।",
+                f"**Fair Market Price ({res['diff_pct']:+}%):** Quoted ₹{res['quote']:,} aligns closely with the ₹{res['bench']:,} benchmark. Still confirm **ALMM/DCR** serials and **BIS** compliance before paying an advance.",
+                f"**उचित बाजार मूल्य ({res['diff_pct']:+}%):** कोटेशन ₹{res['quote']:,} मानक लागत ₹{res['bench']:,} के अनुरूप है। अग्रिम भुगतान से पहले **ALMM/DCR** और **BIS** विवरण अवश्य जांचें।",
                 is_hi,
             )
         )
@@ -775,6 +802,14 @@ with tab2:
         else:
             st.success(f"**{tr('Site survey findings:', 'साइट सर्वेक्षण निष्कर्ष:', is_hi)}**")
         st.markdown(roof_state["text"])
+        if is_rooftop:
+            st.caption(
+                tr(
+                    f"Sidebar input context: **{roof_sqft:,} sq. ft.** shadow-free area · **{res['rec_kw']:g} kW** recommended system (visual photo estimates always require physical tape measurement).",
+                    f"साइडबार विवरण: **{roof_sqft:,} वर्ग फुट** छाया-मुक्त क्षेत्र · **{res['rec_kw']:g} kW** अनुशंसित सिस्टम (फोटो अनुमान के लिए फीते से वास्तविक माप आवश्यक है)।",
+                    is_hi,
+                )
+            )
         if roof_state.get("met"):
             _render_eff(roof_state["met"])
 
