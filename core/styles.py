@@ -65,6 +65,7 @@ div.stButton>button[data-testid="stBaseButton-secondary"]:hover{background:#E9EF
 .ledger-total .amt{font-family:'Source Serif 4','Noto Serif Devanagari',Georgia,serif;font-size:1.95rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;}
 .ledger-foot{margin-top:10px;font-size:.8rem;color:var(--muted);}
 .ai-report-box{background:#FFFFFF;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:12px;padding:18px 22px;margin:10px 0 14px 0;}
+.ba-strip{background:#FFFFFF;border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin:10px 0 12px 0;font-size:0.9rem;color:var(--text);font-variant-numeric:tabular-nums;}
 [data-testid="stMain"] .stMarkdown p,[data-testid="stMain"] .stMarkdown li{max-width:72ch;line-height:1.65;}
 [data-testid="stMain"] .stMarkdown strong,[data-testid="stMain"] .stMarkdown b{color:#0B5139;font-weight:700;}
 [data-testid="stMain"] .stMarkdown li{margin-bottom:8px;}
