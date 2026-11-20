@@ -63,57 +63,118 @@ def _render_eff(m: dict):
     )
 
 
+def _demo_fallback_audit(res: dict, state: str, st_info: dict, is_rooftop: bool, is_hi: bool) -> str:
+    size_lbl = f"{res['rec_kw']:g} kW" if is_rooftop else f"{res['hp']:g} HP"
+    if is_hi:
+        return (
+            f"**Sample answer (live AI unavailable):**\n"
+            f"- **DISCOM और लोड ({state} / {st_info['discom']}):** **{size_lbl}** क्षमता के लिए **नेट-मीटरिंग** व स्वीकृत लोड नियमों की पुष्टि अपने DISCOM या **pmsuryaghar.gov.in** पर करें।\n"
+            f"- **ALMM / DCR व BIS:** सब्सिडी पात्रता के लिए **ALMM** सूचीबद्ध एवं **DCR** मॉड्यूल और **BIS** प्रमाणित इनवर्टर/पंप ही लें।\n"
+            f"- **सुरक्षा व स्ट्रक्चर:** **AC/DC SPD**, **अर्थिंग** और कम से कम **80 µm** हॉट-डिप **GI स्ट्रक्चर** सुनिश्चित करें।\n"
+            f"- **भुगतान व आंकड़े:** मानक लागत **₹{res['bench']:,}**, सब्सिडी **₹{res['sub']:,}**, शुद्ध लागत **₹{res['net']:,}** — भुगतान चरणबद्ध रखें।"
+        )
+    return (
+        f"**Sample answer (live AI unavailable):**\n"
+        f"- **DISCOM & Load ({state} / {st_info['discom']}):** Confirm **net-metering** feasibility and sanctioned load rules for **{size_lbl}** via **{st_info['discom']}** or **pmsuryaghar.gov.in**.\n"
+        f"- **ALMM / DCR & BIS Hardware:** Insist on **ALMM**-listed **DCR** modules and **BIS**-certified equipment for subsidy compliance.\n"
+        f"- **Safety & Structure:** Verify **AC/DC surge protection**, proper **earthing**, and hot-dip **GI structure** (typically **≥80 µm**).\n"
+        f"- **Key Figures & Milestones:** Benchmark **₹{res['bench']:,}**, Subsidy **₹{res['sub']:,}**, Net Cost **₹{res['net']:,}** — tie payments to installation/commissioning milestones."
+    )
+
+
+def _build_summary_html(state: str, st_info: dict, res: dict, quote: int, is_rooftop: bool, is_hi: bool) -> str:
+    sys_txt = f"{res['rec_kw']:g} kW Rooftop" if is_rooftop else f"{res['hp']:g} HP ({res['array_kwp']} kWp)"
+    pb_txt = f"{res['payback']} Years" if res["payback"] < 50 else "N/A"
+    quote_line = f"<p><b>Installer Quote:</b> ₹{quote:,}</p>" if quote > 0 else ""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UrjaMitra Solar Summary — {html.escape(state)}</title>
+<style>
+  body {{ font-family: Arial, sans-serif; max-width: 720px; margin: 32px auto; color: #14231C; background: #F5F7F4; }}
+  .card {{ background: #FFFFFF; border: 1px solid #D9E1DB; border-radius: 12px; padding: 24px; }}
+  h1 {{ color: #0F6B4B; margin-top: 0; }}
+  .total {{ background: #FFF4D6; padding: 14px 18px; border-radius: 8px; font-size: 1.25rem; font-weight: bold; margin: 14px 0; }}
+  .meta {{ color: #5A6B62; font-size: 0.9rem; }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>UrjaMitra (ऊर्जा मित्र) — Solar Summary</h1>
+    <p class="meta">State: <b>{html.escape(state)}</b> · Utility: {html.escape(st_info['discom'])} ({html.escape(st_info['regulator'])})</p>
+    {quote_line}
+    <p><b>MNRE Benchmark Cost:</b> ₹{res['bench']:,}</p>
+    <p><b>Estimated Subsidy:</b> − ₹{res['sub']:,}</p>
+    <div class="total">You Pay: ₹{res['net']:,}</div>
+    <p><b>Recommended System:</b> {html.escape(sys_txt)}</p>
+    <p><b>Estimated Payback:</b> {html.escape(pb_txt)} · <b>Year-1 Savings:</b> ₹{res['save_yr1']:,}/yr</p>
+    <p><b>25-Year Net Savings:</b> ₹{res['net_25yr']:,} ({html.escape(_fmt_lakh(res['net_25yr'], is_hi))})</p>
+    <hr>
+    <p class="meta">Indicative estimate only. Verify exact subsidy slabs, net-metering rules, and empanelled vendors on pmsuryaghar.gov.in or your DISCOM portal before signing any contract.</p>
+  </div>
+</body>
+</html>"""
+
+
 # ---------------------------------------------------------
-# 1. Sidebar Inputs & Language Toggle (Evaluated First)
+# 1. Top-Right Language Toggle (Main Page)
+# ---------------------------------------------------------
+if "lang_choice" not in st.session_state:
+    st.session_state["lang_choice"] = "English"
+
+_, top_lang_col = st.columns([4.2, 1.2])
+with top_lang_col:
+    lang = st.radio(
+        "Language",
+        ["English", "Hindi"],
+        format_func=lambda x: "English" if x == "English" else "हिंदी",
+        horizontal=True,
+        label_visibility="collapsed",
+        key="lang_choice",
+    )
+is_hi = lang == "Hindi"
+
+PRESET_KEYS = ["custom", "home", "overpriced", "farmer"]
+PRESET_LABELS = {
+    "custom": tr("Custom input", "कस्टम इनपुट", is_hi),
+    "home": tr("Haryana home", "हरियाणा घर", is_hi),
+    "overpriced": tr("Overpriced quote", "महंगा कोटेशन", is_hi),
+    "farmer": tr("Rajasthan farmer", "राजस्थान किसान", is_hi),
+}
+PRESET_NOTES = {
+    "home": tr("4 kW rooftop · ₹2.03L quote", "4 kW रूफटॉप · ₹2.03L कोटेशन", is_hi),
+    "overpriced": tr("₹53k above MNRE benchmark", "MNRE मानक से ₹53k अधिक", is_hi),
+    "farmer": tr("7.5 HP PM-KUSUM · 180 ft bore", "7.5 HP PM-कुसुम · 180 फीट बोर", is_hi),
+}
+if "active_preset" not in st.session_state:
+    st.session_state["active_preset"] = "custom"
+
+
+def _apply_preset(key: str):
+    st.session_state["active_preset"] = key
+    for wk in (
+        "state_in",
+        "sector_in",
+        "bill_in",
+        "roof_in",
+        "sanc_in",
+        "irr_in",
+        "hp_in",
+        "depth_in",
+        "diesel_in",
+        f"quote_in_{key}",
+    ):
+        st.session_state.pop(wk, None)
+
+
+# ---------------------------------------------------------
+# 2. Sidebar Inputs
 # ---------------------------------------------------------
 api_key = get_api_key()
 crustdata_token = _get_crustdata_token()
 
-if "lang_choice" not in st.session_state:
-    st.session_state["lang_choice"] = "English"
-
 with st.sidebar:
-    lang = st.radio(
-        "Language / भाषा",
-        ["English", "Hindi"],
-        format_func=lambda x: "English" if x == "English" else "हिंदी",
-        horizontal=True,
-        key="lang_choice",
-    )
-    is_hi = lang == "Hindi"
-
-    PRESET_KEYS = ["custom", "home", "overpriced", "farmer"]
-    PRESET_LABELS = {
-        "custom": tr("Custom input", "कस्टम इनपुट", is_hi),
-        "home": tr("Haryana home", "हरियाणा घर", is_hi),
-        "overpriced": tr("Overpriced quote", "महंगा कोटेशन", is_hi),
-        "farmer": tr("Rajasthan farmer", "राजस्थान किसान", is_hi),
-    }
-    PRESET_NOTES = {
-        "home": tr("4 kW rooftop · ₹2.03L quote", "4 kW रूफटॉप · ₹2.03L कोटेशन", is_hi),
-        "overpriced": tr("₹53k above MNRE benchmark", "MNRE मानक से ₹53k अधिक", is_hi),
-        "farmer": tr("7.5 HP PM-KUSUM · 180 ft bore", "7.5 HP PM-कुसुम · 180 फीट बोर", is_hi),
-    }
-    if "active_preset" not in st.session_state:
-        st.session_state["active_preset"] = "custom"
-
-    def _apply_preset(key: str):
-        st.session_state["active_preset"] = key
-        for wk in (
-            "state_in",
-            "sector_in",
-            "bill_in",
-            "roof_in",
-            "sanc_in",
-            "irr_in",
-            "hp_in",
-            "depth_in",
-            "diesel_in",
-            f"quote_in_{key}",
-        ):
-            st.session_state.pop(wk, None)
-
-    st.divider()
     st.markdown(f"### {tr('Quick demo presets', 'त्वरित डेमो प्रोफ़ाइल', is_hi)}")
     chosen_key = st.selectbox(
         tr("Load sample scenario", "नमूना परिदृश्य चुनें", is_hi),
@@ -247,11 +308,11 @@ with st.sidebar:
     with st.expander(tr("AI engine & efficiency", "AI इंजन और दक्षता", is_hi), expanded=False):
         demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False, key="demo_mode_opt")
         smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False, key="smart_skip_opt")
-        model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"])
+        model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"])
         engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)
 
 # ---------------------------------------------------------
-# 2. Hero Banner & Context Pills
+# 3. Hero Banner, Calculation, Receipt Ledger & 3 Stat Cards
 # ---------------------------------------------------------
 max_kusum_pct = STATE_DB[state]["central_kusum_pct"] + STATE_DB[state]["kusum_state_sub"]
 hero_sub_chip = (
@@ -279,9 +340,6 @@ H(
     """
 )
 
-# ---------------------------------------------------------
-# 3. Deterministic Calculation, Receipt Ledger & Stat Cards
-# ---------------------------------------------------------
 res = (
     calc_rooftop(state, bill, roof_sqft, sanc_kw, quote, is_hi=is_hi)
     if is_rooftop
@@ -305,7 +363,6 @@ H(
     """
 )
 
-# Main-area "Try a demo" buttons synced with sidebar selector
 d_cols = st.columns([1.1, 1.3, 1.3, 1.3])
 with d_cols[0]:
     st.markdown(f"<div style='padding-top:10px;font-weight:700;color:#14231C;'>{tr('Try a demo:', 'डेमो आज़माएँ:', is_hi)}</div>", unsafe_allow_html=True)
@@ -329,7 +386,6 @@ st.caption(
     )
 )
 
-# Receipt-style Ledger (Left) + 3 Stat Cards (Right)
 led_col, stat_col = st.columns([1.3, 1])
 
 if is_rooftop:
@@ -466,18 +522,39 @@ else:
             )
         )
 
-# WhatsApp Summary Share
-wa_msg = (
-    f"UrjaMitra Solar Estimate ({state})\n"
-    f"• System: {res['rec_kw'] if is_rooftop else res['hp']} {'kW Rooftop' if is_rooftop else 'HP Pump'}\n"
-    f"• Benchmark: ₹{res['bench']:,} | Est. Subsidy: ₹{res['sub']:,}\n"
-    f"• You Pay: ₹{res['net']:,} | Net Savings: ₹{res['save_yr1']:,}/yr"
-)
-wa_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(wa_msg)}"
-st.link_button(tr("Share on WhatsApp", "WhatsApp पर साझा करें", is_hi), wa_url)
+act_c1, act_c2 = st.columns([1.2, 1.4])
+with act_c1:
+    wa_msg = (
+        f"UrjaMitra Solar Estimate ({state})\n"
+        f"• System: {res['rec_kw'] if is_rooftop else res['hp']} {'kW Rooftop' if is_rooftop else 'HP Pump'}\n"
+        f"• Benchmark: ₹{res['bench']:,} | Est. Subsidy: ₹{res['sub']:,}\n"
+        f"• You Pay: ₹{res['net']:,} | Net Savings: ₹{res['save_yr1']:,}/yr"
+    )
+    wa_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(wa_msg)}"
+    st.link_button(tr("Share on WhatsApp", "WhatsApp पर साझा करें", is_hi), wa_url)
+with act_c2:
+    st.download_button(
+        tr("Download my solar summary", "मेरा सोलर सारांश डाउनलोड करें", is_hi),
+        data=_build_summary_html(state, st_info, res, quote, is_rooftop, is_hi),
+        file_name=f"UrjaMitra_Summary_{state}.html",
+        mime="text/html",
+    )
+
+with st.expander(tr("Sources & assumptions (verify before use)", "स्रोत और मान्यताएँ (उपयोग से पहले जांचें)", is_hi), expanded=False):
+    st.markdown(
+        tr(
+            "- **PM Surya Ghar CFA & Benchmarks:** Indicative slab & benchmark modeling based on MNRE PM Surya Ghar Muft Bijli Yojana guidelines (verify current slabs and DCR rules on `pmsuryaghar.gov.in`).\n"
+            "- **PM-KUSUM State Shares & Tariffs:** Central + state share splits and state utility/irrigation figures are indicative; where a state uses a default placeholder (such as **30% state**), treat it as a *scheme default; your state may differ* and verify with your SNA/DISCOM.\n"
+            "- **ROI & Degradation:** 25-year projection models annual generation degradation, O&M, and tariff escalation — verify exact tariff & net-metering terms with your local DISCOM before use.",
+            "- **PM सूर्य घर CFA व मानक लागत:** MNRE PM सूर्य घर मार्गदर्शिका पर आधारित संकेतात्मक अनुमान (वर्तमान स्लैब और DCR नियम `pmsuryaghar.gov.in` पर सत्यापित करें)।\n"
+            "- **PM-कुसुम राज्य हिस्सा व दरें:** केंद्र/राज्य अनुपात संकेतात्मक हैं; जहाँ डिफ़ॉल्ट मान (जैसे **30% राज्य**) है, वहाँ *योजना डिफ़ॉल्ट; आपके राज्य में अंतर संभव है* मानें और DISCOM/एजेंसी से पुष्टि करें।\n"
+            "- **25-वर्षीय ROI:** पैनल गिरावट, रखरखाव और टैरिफ वृद्धि पर आधारित अनुमान — उपयोग से पहले अपने DISCOM से पुष्टि करें।",
+            is_hi,
+        )
+    )
 
 # ---------------------------------------------------------
-# 4. Main Workspace Tabs (Emojis preserved only in tab labels)
+# 4. Main Workspace Tabs
 # ---------------------------------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
@@ -489,7 +566,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
     ]
 )
 
-# --- TAB 1: Quote Audit, Crustdata EPC Verification & AI Insights ---
+# --- TAB 1 ---
 with tab1:
     st.subheader(tr("Deterministic quote audit", "तत्काल कोटेशन ऑडिट", is_hi))
     if res["verdict"] == "NO_QUOTE":
@@ -538,7 +615,7 @@ with tab1:
     )
     is_detailed = "Detailed" in detail_mode or "विस्तृत" in detail_mode
 
-    if st.button(tr("Get my solar report", "मेरी सोलर रिपोर्ट प्राप्त करें", is_hi), key="run_ai_btn"):
+    if st.button(tr("Get my solar report", "मेरी सोलर रिपोर्ट प्राप्त करें", is_hi), key="run_ai_btn", type="primary"):
         should_skip = smart_skip and uploaded_img is None and res["verdict"] in ("NO_QUOTE", "FAIR")
         if demo_mode or should_skip:
             reason = (
@@ -571,7 +648,6 @@ with tab1:
                 f"3. NEVER invent bank loan interest rates, unverified state subsidies, or vendor names. If a local utility rule varies by circle, explicitly advise verifying on pmsuryaghar.gov.in or {st_info['discom']}. "
                 f"4. Preserve these exact numbers verbatim: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net Cost ₹{res['net']:,}. "
             )
-
             if is_detailed:
                 sys_p = strict_grounding + (
                     "Format as a crisp, high-contrast customer guide using 4 bold-headed bulleted sections: "
@@ -591,27 +667,39 @@ with tab1:
                 f"Size: {res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}, "
                 f"Quote: ₹{res['quote']:,} ({res['verdict']}). "
                 + (
-                    "Carefully inspect the uploaded quote/bill image: list visible prices or equipment specs, compare against the ₹{:,} benchmark, and flag any missing DCR/ALMM or earthing items.".format(res["bench"])
+                    "Extract visible prices, panel brand/spec, and inverter spec from the quote image, compare against the ₹{:,} benchmark in code context, and flag any missing DCR/ALMM or earthing items.".format(res["bench"])
                     if img_part
                     else "Give practical, legally accurate verification steps the customer must check before signing a vendor agreement."
                 )
             )
-            txt, metrics = run_llm(
-                api_key,
-                engine_choice,
-                sys_p,
-                usr_p,
-                image_part=img_part,
-                max_tokens=tok_limit,
-                stream=False,
-                render_inline=False,
-            )
-            if txt:
-                st.session_state["ai_audit_state"] = {
-                    "type": "ai",
-                    "text": txt,
-                    "metrics": metrics,
-                }
+            try:
+                txt, metrics = run_llm(
+                    api_key,
+                    engine_choice,
+                    sys_p,
+                    usr_p,
+                    image_part=img_part,
+                    max_tokens=tok_limit,
+                    stream=False,
+                    render_inline=False,
+                )
+                st.session_state["ai_audit_state"] = {"type": "ai", "text": txt, "metrics": metrics}
+            except Exception:
+                if p_key != "custom":
+                    st.session_state["ai_audit_state"] = {
+                        "type": "ai",
+                        "text": _demo_fallback_audit(res, state, st_info, is_rooftop, is_hi),
+                        "metrics": None,
+                    }
+                else:
+                    st.session_state["ai_audit_state"] = {
+                        "type": "warn",
+                        "msg": tr(
+                            "Live AI request could not complete right now. Please try again in a moment.",
+                            "लाइव AI अनुरोध अभी पूरा नहीं हो सका। कृपया थोड़ी देर बाद पुनः प्रयास करें।",
+                            is_hi,
+                        ),
+                    }
 
     ai_state = st.session_state.get("ai_audit_state")
     if ai_state:
@@ -727,7 +815,7 @@ with tab1:
         """
     )
 
-# --- TAB 2: Rooftop Photo Shading Analyzer & Local Verified Installers ---
+# --- TAB 2 ---
 with tab2:
     st.subheader(tr("AI rooftop shading & obstacle analyzer", "AI छत छाया और अवरोध विश्लेषक", is_hi))
     st.caption(
@@ -761,15 +849,16 @@ with tab2:
     with r_col2:
         if active_roof_img:
             st.image(active_roof_img, caption=tr("Uploaded Site Photo", "अपलोड की गई छत की फोटो", is_hi), use_container_width=True)
-            if st.button(tr("Analyze roof shading", "छत की छाया जांचें", is_hi), key="analyze_roof_btn"):
+            if st.button(tr("Analyze roof shading", "छत की छाया जांचें", is_hi), key="analyze_roof_btn", type="primary"):
+                sample_roof_txt = tr(
+                    "• **Shading Check:** Keep south-facing panels at least **1.5m** away from overhead water tanks and tall parapet walls.\n• **Tilt & Orientation:** Use a **south-facing ~28°** tilt for maximum annual generation.\n• **Mounting Note:** Choose an **elevated hot-dip GI structure** if parapet height exceeds **3 ft**.",
+                    "• **छाया जांच:** दक्षिणमुखी पैनलों को पानी की टंकी और ऊँची मुंडेर से कम से कम **1.5 मीटर** दूर रखें।\n• **झुकाव और दिशा:** अधिकतम बिजली उत्पादन के लिए **दक्षिण दिशा में ~28°** झुकाव रखें।\n• **स्ट्रक्चर सुझाव:** यदि मुंडेर **3 फीट** से ऊँची है, तो **ऊँचे हॉट-डिप GI स्ट्रक्चर** का उपयोग करें।",
+                    is_hi,
+                )
                 if demo_mode or not api_key:
                     st.session_state["roof_vision_res"] = {
                         "is_sample": True,
-                        "text": tr(
-                            "• **Shading Check:** Keep south-facing panels at least **1.5m** away from overhead water tanks and tall parapet walls.\n• **Tilt & Orientation:** Use a **south-facing ~28°** tilt for maximum annual generation.\n• **Mounting Note:** Choose an **elevated hot-dip GI structure** if parapet height exceeds **3 ft**.",
-                            "• **छाया जांच:** दक्षिणमुखी पैनलों को पानी की टंकी और ऊँची मुंडेर से कम से कम **1.5 मीटर** दूर रखें।\n• **झुकाव और दिशा:** अधिकतम बिजली उत्पादन के लिए **दक्षिण दिशा में ~28°** झुकाव रखें।\n• **स्ट्रक्चर सुझाव:** यदि मुंडेर **3 फीट** से ऊँची है, तो **ऊँचे हॉट-डिप GI स्ट्रक्चर** का उपयोग करें।",
-                            is_hi,
-                        ),
+                        "text": sample_roof_txt,
                         "met": None,
                     }
                 else:
@@ -782,22 +871,37 @@ with tab2:
                         f"3. **Site Difficulties & Constraints:** Highlight practical installation challenges visible here (e.g., narrow layout, high parapet wind/shadow clearance, soot/dust near exhausts, waterproofing/pool proximity, or material access).\n"
                         f"4. **Mounting & Civil Recommendations:** Recommend optimal tilt/orientation (**south-facing**), elevated structure height, and **non-penetrative ballast** or **chemical anchoring**."
                     )
-                    r_txt, r_met = run_llm(
-                        api_key,
-                        engine_choice,
-                        sys_roof,
-                        "Analyze this rooftop for solar PV installation.",
-                        image_part=roof_part,
-                        max_tokens=480,
-                        stream=False,
-                        render_inline=False,
-                    )
-                    if r_txt:
+                    try:
+                        r_txt, r_met = run_llm(
+                            api_key,
+                            engine_choice,
+                            sys_roof,
+                            "Analyze this rooftop for solar PV installation.",
+                            image_part=roof_part,
+                            max_tokens=480,
+                            stream=False,
+                            render_inline=False,
+                        )
                         st.session_state["roof_vision_res"] = {
                             "is_sample": False,
                             "text": r_txt,
                             "met": r_met,
                         }
+                    except Exception:
+                        if p_key != "custom":
+                            st.session_state["roof_vision_res"] = {
+                                "is_sample": False,
+                                "text": f"**Sample answer (live AI unavailable):**\n{sample_roof_txt}",
+                                "met": None,
+                            }
+                        else:
+                            st.warning(
+                                tr(
+                                    "Could not analyze roof photo right now. Please try again.",
+                                    "अभी छत की फोटो का विश्लेषण नहीं हो सका। कृपया पुनः प्रयास करें।",
+                                    is_hi,
+                                )
+                            )
         else:
             st.info(tr("Upload or take a photo of your terrace on the left to run an AI shading & obstacle check.", "AI छाया और अवरोध जांच के लिए बाईं ओर अपनी छत की फोटो अपलोड करें।", is_hi))
 
@@ -893,7 +997,7 @@ with tab2:
                     )
                 )
 
-# --- TAB 3: 25-Year ROI & Bill of Materials ---
+# --- TAB 3 ---
 with tab3:
     st.subheader(tr("25-year cumulative cashflow projection", "25-वर्षीय संचयी नकदी प्रवाह अनुमान", is_hi))
 
@@ -964,7 +1068,7 @@ with tab3:
         """
     )
 
-# --- TAB 4: Official Application Letter ---
+# --- TAB 4 ---
 with tab4:
     st.subheader(tr("DISCOM / state nodal agency application letter", "डिस्कॉम / राज्य नोडल एजेंसी आवेदन पत्र", is_hi))
     lc1, lc2, lc3 = st.columns(3)
@@ -976,12 +1080,24 @@ with tab4:
         app_addr = st.text_input(tr("Village / City Address", "गाँव / शहर का पता", is_hi), "")
 
     draft_letter = build_letter(res, app_name, app_id, app_addr, is_hi)
-    if st.checkbox(tr("Improve wording (preserves all figures)", "भाषा सुधारें (सभी आंकड़े सुरक्षित रहेंगे)", is_hi), value=False):
+    if "polished_letter_text" not in st.session_state:
+        st.session_state["polished_letter_text"] = None
+
+    if st.button(tr("Improve wording (preserves all figures)", "भाषा सुधारें (सभी आंकड़े सुरक्षित रहेंगे)", is_hi), key="polish_letter_btn", type="primary"):
         if api_key and not demo_mode:
-            polished, ok = polish_letter(api_key, engine_choice, draft_letter, lang)
-            if ok:
-                draft_letter = polished
-            else:
+            try:
+                polished, ok = polish_letter(api_key, engine_choice, draft_letter, lang)
+                if ok and polished:
+                    st.session_state["polished_letter_text"] = polished
+                else:
+                    st.warning(
+                        tr(
+                            "Could not improve wording right now; showing standard template draft.",
+                            "अभी भाषा सुधार नहीं हो सका; मानक टेम्पलेट ड्राफ्ट दिखाया जा रहा है।",
+                            is_hi,
+                        )
+                    )
+            except Exception:
                 st.warning(
                     tr(
                         "Could not improve wording right now; showing standard template draft.",
@@ -989,17 +1105,26 @@ with tab4:
                         is_hi,
                     )
                 )
+        else:
+            st.info(
+                tr(
+                    "Connect GEMINI_API_KEY (with Demo mode off) to polish wording with AI.",
+                    "AI से भाषा सुधारने के लिए GEMINI_API_KEY जोड़ें और डेमो मोड बंद रखें।",
+                    is_hi,
+                )
+            )
 
-    safe_letter_html = html.escape(draft_letter).replace("\n", "<br>")
+    display_letter = st.session_state.get("polished_letter_text") or draft_letter
+    safe_letter_html = html.escape(display_letter).replace("\n", "<br>")
     st.markdown(f'<div class="paper-letter">{safe_letter_html}</div>', unsafe_allow_html=True)
     st.download_button(
         tr("Download official letter (.txt)", "आधिकारिक पत्र डाउनलोड करें (.txt)", is_hi),
-        data=draft_letter,
+        data=display_letter,
         file_name=f"UrjaMitra_Application_{state}.txt",
         mime="text/plain",
     )
 
-# --- TAB 5: Solar Copilot Q&A ---
+# --- TAB 5 ---
 with tab5:
     st.subheader(tr("Solar policy & engineering Q&A", "सोलर नीति और इंजीनियरिंग प्रश्नोत्तर", is_hi))
     if "chat_history" not in st.session_state:
@@ -1036,17 +1161,29 @@ with tab5:
                     f"Never invent subsidy figures or vendor names; if unsure, tell the user to verify with their DISCOM or pmsuryaghar.gov.in. "
                     f"Answer clearly and concisely in {'Hindi (Devanagari)' if is_hi else 'English'}."
                 )
-                ans, q_metrics = run_llm(
-                    api_key,
-                    engine_choice,
-                    sys_qa,
-                    user_q,
-                    max_tokens=450,
-                    stream=False,
-                    render_inline=True,
-                )
-                if q_metrics:
-                    _render_eff(q_metrics)
+                try:
+                    ans, q_metrics = run_llm(
+                        api_key,
+                        engine_choice,
+                        sys_qa,
+                        user_q,
+                        max_tokens=450,
+                        stream=False,
+                        render_inline=True,
+                    )
+                    if q_metrics:
+                        _render_eff(q_metrics)
+                except Exception:
+                    if p_key != "custom":
+                        ans = _demo_fallback_audit(res, state, st_info, is_rooftop, is_hi)
+                        st.markdown(ans)
+                    else:
+                        ans = tr(
+                            "Sorry, live AI is temporarily unavailable. Please try again in a moment.",
+                            "क्षमा करें, लाइव AI अस्थायी रूप से उपलब्ध नहीं है। कृपया थोड़ी देर बाद पुनः प्रयास करें।",
+                            is_hi,
+                        )
+                        st.warning(ans)
             if ans:
                 st.session_state.chat_history.append({"role": "assistant", "content": ans})
 
