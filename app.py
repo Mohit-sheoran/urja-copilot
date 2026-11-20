@@ -619,8 +619,8 @@ with tab1:
             st.session_state["ai_audit_state"] = {
                 "type": "skip",
                 "msg": tr(
-                    f"**{reason}:** System sizing ({res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}), ₹{res['sub']:,} subsidy, and {res['payback']}-yr payback are already verified deterministically.",
-                    f"**{reason}:** सिस्टम क्षमता ({res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}), ₹{res['sub']:,} सब्सिडी, और {res['payback']}-वर्षीय पेबैक पहले ही सटीक रूप से सत्यापित हैं।",
+                    f"**{reason}:** System sizing (**{res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}**), **₹{res['sub']:,}** subsidy, and **{res['payback']}-yr** payback are already verified deterministically.",
+                    f"**{reason}:** सिस्टम क्षमता (**{res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}**), **₹{res['sub']:,}** सब्सिडी, और **{res['payback']}-वर्षीय** पेबैक पहले ही सटीक रूप से सत्यापित हैं।",
                     is_hi,
                 ),
             }
@@ -635,21 +635,24 @@ with tab1:
             strict_grounding = (
                 f"You are an Indian solar regulatory & electrical engineer advising a real customer in {state}. "
                 f"Respond strictly in {lang_rule}. "
-                f"STRICT ACCURACY RULES: "
-                f"1. Rely ONLY on verified MNRE PM Surya Ghar / PM-KUSUM rules, BIS/ALMM standards, and the exact inputs provided below. "
-                f"2. NEVER invent bank loan interest rates, unverified state subsidies, or vendor names. If a local utility rule varies by circle, explicitly advise verifying on pmsuryaghar.gov.in or {st_info['discom']}. "
-                f"3. Preserve these exact numbers verbatim: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net Cost ₹{res['net']:,}. "
+                f"FORMATTING & ACCURACY RULES: "
+                f"1. Start every bullet with a **bold label** (e.g., **DISCOM & Load:**) and put **bold** around key rupee figures, percentages, standards (**ALMM**, **DCR**, **BIS**), and action items so key takeaways stand out immediately. "
+                f"2. Rely ONLY on verified MNRE PM Surya Ghar / PM-KUSUM rules, BIS/ALMM standards, and the exact inputs provided below. "
+                f"3. NEVER invent bank loan interest rates, unverified state subsidies, or vendor names. If a local utility rule varies by circle, explicitly advise verifying on pmsuryaghar.gov.in or {st_info['discom']}. "
+                f"4. Preserve these exact numbers verbatim: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net Cost ₹{res['net']:,}. "
             )
 
             if is_detailed:
                 sys_p = strict_grounding + (
-                    "Format as a clear, practical customer guide using 4 structured bulleted sections: "
-                    "(1) DISCOM & Sanctioned Load Action, (2) Mandatory ALMM/DCR & BIS Hardware Verification, "
-                    "(3) Earthing, Surge & Structure Safety Specs, and (4) Payment Milestone & Subsidy Disbursement Safeguards."
+                    "Format as a crisp, high-contrast customer guide using 4 bold-headed bulleted sections: "
+                    "**1. DISCOM & Sanctioned Load Action:** ..., "
+                    "**2. Mandatory ALMM/DCR & BIS Hardware:** ..., "
+                    "**3. Earthing, Surge & Structure Safety:** ..., and "
+                    "**4. Payment Milestones & Subsidy Safeguards:** ..."
                 )
                 tok_limit = 850
             else:
-                sys_p = strict_grounding + "Respond using strictly 4 concise, high-signal bullet points with no extra headings."
+                sys_p = strict_grounding + "Respond using strictly 4 punchy bullet points starting with **bold labels** and bold key facts, with no extra headings."
                 tok_limit = 450
 
             usr_p = (
@@ -730,8 +733,8 @@ with tab2:
                     st.session_state["roof_vision_res"] = {
                         "is_sample": True,
                         "text": tr(
-                            "• **Shading Check:** Ensure south-facing panels sit at least 1.5m away from overhead water tanks and tall parapet walls.\n• **Tilt & Orientation:** Recommended south tilt ~28° for optimal annual generation.\n• **Mounting Note:** Use elevated hot-dip GI structure if parapet height exceeds 3 ft.",
-                            "• **छाया जांच:** दक्षिणमुखी पैनलों को पानी की टंकी और ऊँची मुंडेर से कम से कम 1.5 मीटर दूर रखें।\n• **झुकाव और दिशा:** अधिकतम बिजली उत्पादन के लिए दक्षिण दिशा में ~28° झुकाव रखें।\n• **स्ट्रक्चर सुझाव:** यदि मुंडेर 3 फीट से ऊँची है, तो ऊँचे हॉट-डिप GI स्ट्रक्चर का उपयोग करें।",
+                            "• **Shading Check:** Keep south-facing panels at least **1.5m** away from overhead water tanks and tall parapet walls.\n• **Tilt & Orientation:** Use a **south-facing ~28°** tilt for maximum annual generation.\n• **Mounting Note:** Choose an **elevated hot-dip GI structure** if parapet height exceeds **3 ft**.",
+                            "• **छाया जांच:** दक्षिणमुखी पैनलों को पानी की टंकी और ऊँची मुंडेर से कम से कम **1.5 मीटर** दूर रखें।\n• **झुकाव और दिशा:** अधिकतम बिजली उत्पादन के लिए **दक्षिण दिशा में ~28°** झुकाव रखें।\n• **स्ट्रक्चर सुझाव:** यदि मुंडेर **3 फीट** से ऊँची है, तो **ऊँचे हॉट-डिप GI स्ट्रक्चर** का उपयोग करें।",
                             is_hi,
                         ),
                         "met": None,
@@ -740,11 +743,11 @@ with tab2:
                     roof_part = prepare_image(active_roof_img)
                     sys_roof = (
                         f"You are a senior Indian rooftop solar site-survey engineer assessing this roof in {state}. "
-                        f"Inspect this rooftop image and respond in {'Hindi (Devanagari)' if is_hi else 'English'} with 4 concise bullet points (no intro paragraph) covering:\n"
-                        f"1. **Estimated Plant Capacity:** Visually estimate the shadow-free usable roof area and approximate solar plant capacity range (kW) that can fit here (using ~100 sq. ft. per kW; note this is a visual estimate requiring physical tape measurement).\n"
-                        f"2. **Shading Obstacles:** Identify specific objects visible in the photo (chimneys, parapet walls, water tanks, trees, adjacent structures) and how they cast shadows.\n"
+                        f"Inspect this rooftop image and respond in {'Hindi (Devanagari)' if is_hi else 'English'} with 4 concise bullet points (no intro paragraph) using **bold** on key measurements, obstacles, and recommendations:\n"
+                        f"1. **Estimated Plant Capacity:** Visually estimate the shadow-free usable roof area and approximate solar plant capacity range (**kW**) that can fit here (using **~100 sq. ft. per kW**; note this is a visual estimate requiring physical tape measurement).\n"
+                        f"2. **Shading Obstacles:** Identify specific objects visible in the photo (**chimneys**, **parapet walls**, **water tanks**, **trees**, **adjacent structures**) and how they cast shadows.\n"
                         f"3. **Site Difficulties & Constraints:** Highlight practical installation challenges visible here (e.g., narrow layout, high parapet wind/shadow clearance, soot/dust near exhausts, waterproofing/pool proximity, or material access).\n"
-                        f"4. **Mounting & Civil Recommendations:** Recommend optimal tilt/orientation (south-facing), elevated structure height, and non-penetrative ballast or chemical anchoring."
+                        f"4. **Mounting & Civil Recommendations:** Recommend optimal tilt/orientation (**south-facing**), elevated structure height, and **non-penetrative ballast** or **chemical anchoring**."
                     )
                     r_txt, r_met = run_llm(
                         api_key,
@@ -977,14 +980,15 @@ with tab5:
         with st.chat_message("assistant"):
             if demo_mode or not api_key:
                 ans = tr(
-                    f"For {state} ({st_info['discom']}), ensure your installer uses ALMM-listed DCR modules and submits net-metering feasibility via pmsuryaghar.gov.in.",
-                    f"{state} ({st_info['discom']}) के लिए सुनिश्चित करें कि वेंडर ALMM-सूचीबद्ध DCR मॉड्यूल का उपयोग करे और pmsuryaghar.gov.in के माध्यम से आवेदन करे।",
+                    f"For {state} ({st_info['discom']}), ensure your installer uses **ALMM-listed DCR modules** and submits **net-metering feasibility** via **pmsuryaghar.gov.in**.",
+                    f"{state} ({st_info['discom']}) के लिए सुनिश्चित करें कि वेंडर **ALMM-सूचीबद्ध DCR मॉड्यूल** का उपयोग करे और **pmsuryaghar.gov.in** के माध्यम से **नेट-मीटरिंग** आवेदन करे।",
                     is_hi,
                 )
                 st.markdown(ans)
             else:
                 sys_qa = (
                     f"You are UrjaMitra, an expert Indian solar, agricultural land (Khasra/Khatauni), and DISCOM policy copilot for {state} ({st_info['discom']}). "
+                    f"Use **bold** on key rules, rupee amounts, deadlines/milestones, and technical terms (**DCR**, **ALMM**, **net-metering**, **Khasra**) so the most important parts stand out clearly. "
                     f"Never invent subsidy figures or vendor names; if unsure, tell the user to verify with their DISCOM or pmsuryaghar.gov.in. "
                     f"Answer clearly and concisely in {'Hindi (Devanagari)' if is_hi else 'English'}."
                 )
