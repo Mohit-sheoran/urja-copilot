@@ -5,6 +5,7 @@ import streamlit as st
 
 APP_CSS = """
 <style>
+.ai-report-box{background:#FFFFFF;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:12px;padding:18px 22px;margin:10px 0 14px 0;}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Source+Serif+4:wght@600;700&family=Noto+Serif+Devanagari:wght@600;700&display=swap');
 :root{--primary:#0F6B4B;--primary-dark:#0B5139;--accent:#C98A0B;--card:#FFFFFF;--text:#14231C;--muted:#5A6B62;--border:#D9E1DB;--radius:12px;--shadow:none;}
 .stApp{background:#F5F7F4;color:var(--text);font-family:'Inter','Noto Sans Devanagari',sans-serif;}
