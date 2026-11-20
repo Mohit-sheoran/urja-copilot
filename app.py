@@ -86,15 +86,15 @@ PRESET_LABELS = {
 }
 if "active_preset" not in st.session_state:
     st.session_state["active_preset"] = "custom"
-if "quote_in" not in st.session_state:
-    st.session_state["quote_in"] = 0
+if "preset_quote_val" not in st.session_state:
+    st.session_state["preset_quote_val"] = 0
 
 
 def _apply_preset(key: str):
     st.session_state["active_preset"] = key
-    for wk in ("state_in", "sector_in", "bill_in", "roof_in", "sanc_in", "irr_in", "hp_in", "depth_in", "diesel_in"):
+    for wk in ("state_in", "sector_in", "bill_in", "roof_in", "sanc_in", "irr_in", "hp_in", "depth_in", "diesel_in", "quote_in"):
         st.session_state.pop(wk, None)
-    st.session_state["quote_in"] = 285000 if key == "overpriced" else (203000 if key == "home" else 0)
+    st.session_state["preset_quote_val"] = 285000 if key == "overpriced" else (203000 if key == "home" else 0)
 
 
 # ---------------------------------------------------------
@@ -222,6 +222,7 @@ with st.sidebar:
         tr("Installer Quoted Total (₹)", "वेंडर की कुल कीमत (₹)", is_hi),
         0,
         5000000,
+        value=st.session_state["preset_quote_val"],
         step=5000,
         key="quote_in",
     )
