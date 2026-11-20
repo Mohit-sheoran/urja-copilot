@@ -64,60 +64,56 @@ def _render_eff(m: dict):
 
 
 # ---------------------------------------------------------
-# 1. Language Toggle & Synced Demo Preset State
-# ---------------------------------------------------------
-_, lang_col = st.columns([3.8, 1.3])
-with lang_col:
-    lang = st.radio(
-        "Language",
-        ["English", "Hindi"],
-        format_func=lambda x: "English" if x == "English" else "हिंदी",
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-is_hi = lang == "Hindi"
-
-PRESET_KEYS = ["custom", "home", "overpriced", "farmer"]
-PRESET_LABELS = {
-    "custom": tr("Custom input", "कस्टम इनपुट", is_hi),
-    "home": tr("Haryana home", "हरियाणा घर", is_hi),
-    "overpriced": tr("Overpriced quote", "महंगा कोटेशन", is_hi),
-    "farmer": tr("Rajasthan farmer", "राजस्थान किसान", is_hi),
-}
-PRESET_NOTES = {
-    "home": tr("4 kW rooftop · ₹2.03L quote", "4 kW रूफटॉप · ₹2.03L कोटेशन", is_hi),
-    "overpriced": tr("₹53k above MNRE benchmark", "MNRE मानक से ₹53k अधिक", is_hi),
-    "farmer": tr("7.5 HP PM-KUSUM · 180 ft bore", "7.5 HP PM-कुसुम · 180 फीट बोर", is_hi),
-}
-
-if "active_preset" not in st.session_state:
-    st.session_state["active_preset"] = "custom"
-
-
-def _apply_preset(key: str):
-    st.session_state["active_preset"] = key
-    for wk in (
-        "state_in",
-        "sector_in",
-        "bill_in",
-        "roof_in",
-        "sanc_in",
-        "irr_in",
-        "hp_in",
-        "depth_in",
-        "diesel_in",
-        f"quote_in_{key}",
-    ):
-        st.session_state.pop(wk, None)
-
-
-# ---------------------------------------------------------
-# 2. Sidebar Inputs (Evaluated first so Hero Chip stays accurate)
+# 1. Sidebar Inputs & Language Toggle (Evaluated First)
 # ---------------------------------------------------------
 api_key = get_api_key()
 crustdata_token = _get_crustdata_token()
 
+if "lang_choice" not in st.session_state:
+    st.session_state["lang_choice"] = "English"
+
 with st.sidebar:
+    lang = st.radio(
+        "Language / भाषा",
+        ["English", "Hindi"],
+        format_func=lambda x: "English" if x == "English" else "हिंदी",
+        horizontal=True,
+        key="lang_choice",
+    )
+    is_hi = lang == "Hindi"
+
+    PRESET_KEYS = ["custom", "home", "overpriced", "farmer"]
+    PRESET_LABELS = {
+        "custom": tr("Custom input", "कस्टम इनपुट", is_hi),
+        "home": tr("Haryana home", "हरियाणा घर", is_hi),
+        "overpriced": tr("Overpriced quote", "महंगा कोटेशन", is_hi),
+        "farmer": tr("Rajasthan farmer", "राजस्थान किसान", is_hi),
+    }
+    PRESET_NOTES = {
+        "home": tr("4 kW rooftop · ₹2.03L quote", "4 kW रूफटॉप · ₹2.03L कोटेशन", is_hi),
+        "overpriced": tr("₹53k above MNRE benchmark", "MNRE मानक से ₹53k अधिक", is_hi),
+        "farmer": tr("7.5 HP PM-KUSUM · 180 ft bore", "7.5 HP PM-कुसुम · 180 फीट बोर", is_hi),
+    }
+    if "active_preset" not in st.session_state:
+        st.session_state["active_preset"] = "custom"
+
+    def _apply_preset(key: str):
+        st.session_state["active_preset"] = key
+        for wk in (
+            "state_in",
+            "sector_in",
+            "bill_in",
+            "roof_in",
+            "sanc_in",
+            "irr_in",
+            "hp_in",
+            "depth_in",
+            "diesel_in",
+            f"quote_in_{key}",
+        ):
+            st.session_state.pop(wk, None)
+
+    st.divider()
     st.markdown(f"### {tr('Quick demo presets', 'त्वरित डेमो प्रोफ़ाइल', is_hi)}")
     chosen_key = st.selectbox(
         tr("Load sample scenario", "नमूना परिदृश्य चुनें", is_hi),
@@ -254,7 +250,9 @@ with st.sidebar:
         model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"])
         engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)
 
-# Dynamic Hero Banner
+# ---------------------------------------------------------
+# 2. Hero Banner & Context Pills
+# ---------------------------------------------------------
 max_kusum_pct = STATE_DB[state]["central_kusum_pct"] + STATE_DB[state]["kusum_state_sub"]
 hero_sub_chip = (
     tr("Subsidy up to ₹78,000", "₹78,000 तक सब्सिडी", is_hi)
@@ -298,7 +296,7 @@ scheme_tag = (
 )
 H(
     f"""
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px 0;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px 0;">
       <span style="background:#FFFFFF;border:1px solid #D9E1DB;border-radius:999px;padding:5px 13px;font-size:0.82rem;color:#14231C;"><b>{html.escape(state)}</b></span>
       <span style="background:#FFFFFF;border:1px solid #D9E1DB;border-radius:999px;padding:5px 13px;font-size:0.82rem;color:#14231C;">{html.escape(st_info['discom'])} ({html.escape(st_info['regulator'])})</span>
       <span style="background:#FFFFFF;border:1px solid #D9E1DB;border-radius:999px;padding:5px 13px;font-size:0.82rem;color:#14231C;">{st_info['insolation']} kWh/kW/day</span>
@@ -323,8 +321,16 @@ for idx, p_id in enumerate(["home", "overpriced", "farmer"], start=1):
             _apply_preset(p_id)
             st.rerun()
 
-# Receipt-style Ledger (Left) + 2 Quiet Stat Cards (Right)
-led_col, stat_col = st.columns([1.35, 1])
+st.caption(
+    tr(
+        "Tip: Open the top-left sidebar anytime to customize bill, roof area, pump HP, or installer quote.",
+        "सुझाव: बिल, छत का क्षेत्रफल, पंप HP या कोटेशन बदलने के लिए ऊपरी-बाएँ मेनू से साइडबार खोलें।",
+        is_hi,
+    )
+)
+
+# Receipt-style Ledger (Left) + 3 Stat Cards (Right)
+led_col, stat_col = st.columns([1.3, 1])
 
 if is_rooftop:
     split_note = tr("Central MNRE DBT", "केंद्रीय MNRE DBT", is_hi)
@@ -411,28 +417,23 @@ with stat_col:
     pb_txt = f"{res['payback']} {tr('Years', 'वर्ष', is_hi)}" if res["payback"] < 50 else "N/A"
     H(
         f"""
-        <div class="kpi-card" style="margin-bottom:12px;">
+        <div class="kpi-card" style="margin-bottom:10px;">
           <div class="kpi-title">{tr("Recommended system", "अनुशंसित क्षमता", is_hi)}</div>
           <p class="kpi-value">{html.escape(sys_val)}</p>
           <div class="kpi-sub">{html.escape(sys_sub)}</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" style="margin-bottom:10px;">
           <div class="kpi-title">{tr("Estimated payback", "अनुमानित पेबैक", is_hi)}</div>
           <p class="kpi-value">{html.escape(pb_txt)}</p>
           <div class="kpi-sub">₹{res['save_yr1']:,}/{tr("yr", "वर्ष", is_hi)} · {res['co2_yr']}T CO₂</div>
         </div>
+        <div class="kpi-card">
+          <div class="kpi-title">{tr("25-Year net savings", "25-वर्षीय शुद्ध बचत", is_hi)}</div>
+          <p class="kpi-value">{html.escape(_fmt_lakh(res['net_25yr'], is_hi))}</p>
+          <div class="kpi-sub">₹{res['net_25yr']:,} {tr("after O&M & degradation", "रखरखाव व गिरावट के बाद", is_hi)}</div>
+        </div>
         """
     )
-
-# Single headline takeaway stat under Ledger & Stat Cards
-H(
-    f"""
-    <div style="background:#FFFFFF;border:1px solid #D9E1DB;border-left:4px solid #0F6B4B;border-radius:10px;padding:12px 18px;margin:12px 0 10px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-      <span style="font-size:1.1rem;font-weight:700;color:#14231C;">{tr("25-Year Net Savings:", "25-वर्षीय शुद्ध बचत:", is_hi)} ₹{res['net_25yr']:,} ({_fmt_lakh(res['net_25yr'], is_hi)})</span>
-      <span style="font-size:0.84rem;color:#5A6B62;">{tr("After subtracting your net investment, annual O&M, and 0.5%/yr panel degradation", "शुद्ध निवेश, वार्षिक रखरखाव और 0.5%/वर्ष पैनल गिरावट घटाने के बाद", is_hi)}</span>
-    </div>
-    """
-)
 
 if is_rooftop:
     st.info(
@@ -490,6 +491,143 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 
 # --- TAB 1: Quote Audit, Crustdata EPC Verification & AI Insights ---
 with tab1:
+    st.subheader(tr("Deterministic quote audit", "तत्काल कोटेशन ऑडिट", is_hi))
+    if res["verdict"] == "NO_QUOTE":
+        st.info(
+            tr(
+                f"Benchmark cost is **₹{res['bench']:,}** (Net **₹{res['net']:,}** after subsidy). Enter an installer quote in the sidebar to audit pricing.",
+                f"मानक लागत **₹{res['bench']:,}** है (सब्सिडी के बाद शुद्ध **₹{res['net']:,}**)। कीमत की जांच के लिए साइडबार में वेंडर का कोटेशन दर्ज करें।",
+                is_hi,
+            )
+        )
+    elif res["verdict"] == "OVERPRICED":
+        st.error(
+            tr(
+                f"**Overpriced Quote (+{res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,} (+₹{res['diff']:,}). **Ask for:** itemized **DCR module** & **inverter** pricing, separate civil/BOS line items, and milestone-linked payment terms.",
+                f"**अत्यधिक महंगा कोटेशन (+{res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,} (+₹{res['diff']:,})। **जांचें:** **DCR मॉड्यूल** और **इनवर्टर** की अलग-अलग कीमत, सिविल/BOS विवरण और चरणबद्ध भुगतान।",
+                is_hi,
+            )
+        )
+    elif res["verdict"] == "SUSPICIOUSLY_LOW":
+        st.warning(
+            tr(
+                f"**Unusually Low Quote ({res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,}. **Verify:** **ALMM / DCR** certificates, hot-dip **GI structure** thickness (**≥80 µm**), and AC/DC surge protection & earthing.",
+                f"**असामान्य रूप से कम कोटेशन ({res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,}। **सत्यापित करें:** **ALMM / DCR** प्रमाणपत्र, **GI स्ट्रक्चर** की मोटाई (**≥80 µm**) और अर्थिंग/सर्ज सुरक्षा।",
+                is_hi,
+            )
+        )
+    else:
+        st.success(
+            tr(
+                f"**Fair Market Price ({res['diff_pct']:+}%):** Quoted ₹{res['quote']:,} aligns closely with the ₹{res['bench']:,} benchmark. Still confirm **ALMM/DCR** serials and **BIS** compliance before paying an advance.",
+                f"**उचित बाजार मूल्य ({res['diff_pct']:+}%):** कोटेशन ₹{res['quote']:,} मानक लागत ₹{res['bench']:,} के अनुरूप है। अग्रिम भुगतान से पहले **ALMM/DCR** और **BIS** विवरण अवश्य जांचें।",
+                is_hi,
+            )
+        )
+
+    st.divider()
+    st.subheader(tr("AI engineering & quote insights", "AI इंजीनियरिंग और कोटेशन विश्लेषण", is_hi))
+    detail_mode = st.radio(
+        tr("Report Depth", "रिपोर्ट का स्तर", is_hi),
+        [
+            tr("Concise (4 Key Bullets)", "संक्षिप्त (4 मुख्य बिंदु)", is_hi),
+            tr("Detailed Customer Audit (Actionable)", "विस्तृत ग्राहक ऑडिट (संपूर्ण विवरण)", is_hi),
+        ],
+        horizontal=True,
+        key="audit_depth_opt",
+    )
+    is_detailed = "Detailed" in detail_mode or "विस्तृत" in detail_mode
+
+    if st.button(tr("Get my solar report", "मेरी सोलर रिपोर्ट प्राप्त करें", is_hi), key="run_ai_btn"):
+        should_skip = smart_skip and uploaded_img is None and res["verdict"] in ("NO_QUOTE", "FAIR")
+        if demo_mode or should_skip:
+            reason = (
+                tr("Demo mode active", "डेमो मोड सक्रिय है", is_hi)
+                if demo_mode
+                else tr("Smart-skip saved tokens (no quote anomaly or image uploaded)", "स्मार्ट-स्किप ने टोकन बचाए (कोई असामान्य कीमत या फोटो नहीं है)", is_hi)
+            )
+            st.session_state["ai_audit_state"] = {
+                "type": "skip",
+                "msg": tr(
+                    f"**{reason}:** System sizing (**{res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}**), **₹{res['sub']:,}** subsidy, and **{res['payback']}-yr** payback are already verified deterministically.",
+                    f"**{reason}:** सिस्टम क्षमता (**{res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}**), **₹{res['sub']:,}** सब्सिडी, और **{res['payback']}-वर्षीय** पेबैक पहले ही सटीक रूप से सत्यापित हैं।",
+                    is_hi,
+                ),
+            }
+        elif not api_key:
+            st.session_state["ai_audit_state"] = {
+                "type": "warn",
+                "msg": tr("Add `GEMINI_API_KEY` in Streamlit Secrets to run AI analysis.", "AI विश्लेषण चलाने के लिए Streamlit Secrets में `GEMINI_API_KEY` जोड़ें।", is_hi),
+            }
+        else:
+            img_part = prepare_image(uploaded_img)
+            lang_rule = "Hindi (Devanagari)" if is_hi else "English"
+            strict_grounding = (
+                f"You are an Indian solar regulatory & electrical engineer advising a real customer in {state}. "
+                f"Respond strictly in {lang_rule}. "
+                f"FORMATTING & ACCURACY RULES: "
+                f"1. Start every bullet with a **bold label** (e.g., **DISCOM & Load:**) and put **bold** around key rupee figures, percentages, standards (**ALMM**, **DCR**, **BIS**), and action items so key takeaways stand out immediately. "
+                f"2. Rely ONLY on verified MNRE PM Surya Ghar / PM-KUSUM rules, BIS/ALMM standards, and the exact inputs provided below. "
+                f"3. NEVER invent bank loan interest rates, unverified state subsidies, or vendor names. If a local utility rule varies by circle, explicitly advise verifying on pmsuryaghar.gov.in or {st_info['discom']}. "
+                f"4. Preserve these exact numbers verbatim: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net Cost ₹{res['net']:,}. "
+            )
+
+            if is_detailed:
+                sys_p = strict_grounding + (
+                    "Format as a crisp, high-contrast customer guide using 4 bold-headed bulleted sections: "
+                    "**1. DISCOM & Sanctioned Load Action:** ..., "
+                    "**2. Mandatory ALMM/DCR & BIS Hardware:** ..., "
+                    "**3. Earthing, Surge & Structure Safety:** ..., and "
+                    "**4. Payment Milestones & Subsidy Safeguards:** ..."
+                )
+                tok_limit = 850
+            else:
+                sys_p = strict_grounding + "Respond using strictly 4 punchy bullet points starting with **bold labels** and bold key facts, with no extra headings."
+                tok_limit = 450
+
+            usr_p = (
+                f"Audit this {'rooftop solar' if is_rooftop else res['scheme_code']} configuration in {state} "
+                f"(Utility: {st_info['discom']}, Regulator: {st_info['regulator']}). "
+                f"Size: {res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}, "
+                f"Quote: ₹{res['quote']:,} ({res['verdict']}). "
+                + (
+                    "Carefully inspect the uploaded quote/bill image: list visible prices or equipment specs, compare against the ₹{:,} benchmark, and flag any missing DCR/ALMM or earthing items.".format(res["bench"])
+                    if img_part
+                    else "Give practical, legally accurate verification steps the customer must check before signing a vendor agreement."
+                )
+            )
+            txt, metrics = run_llm(
+                api_key,
+                engine_choice,
+                sys_p,
+                usr_p,
+                image_part=img_part,
+                max_tokens=tok_limit,
+                stream=False,
+                render_inline=False,
+            )
+            if txt:
+                st.session_state["ai_audit_state"] = {
+                    "type": "ai",
+                    "text": txt,
+                    "metrics": metrics,
+                }
+
+    ai_state = st.session_state.get("ai_audit_state")
+    if ai_state:
+        if ai_state["type"] == "skip":
+            st.success(ai_state["msg"])
+        elif ai_state["type"] == "warn":
+            st.warning(ai_state["msg"])
+        elif ai_state["type"] == "ai":
+            with st.container():
+                H('<div class="ai-report-box">')
+                st.markdown(ai_state["text"])
+                H('</div>')
+            if ai_state.get("metrics"):
+                _render_eff(ai_state["metrics"])
+
+    st.divider()
     st.subheader(tr("Installer & EPC vendor credibility audit", "सोलर वेंडर और EPC विश्वसनीयता ऑडिट", is_hi))
     st.caption(tr("Verify installer legitimacy and institutional footprint via Crustdata B2B intelligence.", "Crustdata B2B इंटेलिजेंस के माध्यम से इंस्टॉलर की वैधता जांचें।", is_hi))
 
@@ -589,138 +727,6 @@ with tab1:
         """
     )
 
-    st.subheader(tr("Deterministic quote audit", "तत्काल कोटेशन ऑडिट", is_hi))
-    if res["verdict"] == "NO_QUOTE":
-        st.info(
-            tr(
-                f"Benchmark cost is **₹{res['bench']:,}** (Net **₹{res['net']:,}** after subsidy). Enter an installer quote in the sidebar to audit pricing.",
-                f"मानक लागत **₹{res['bench']:,}** है (सब्सिडी के बाद शुद्ध **₹{res['net']:,}**)। कीमत की जांच के लिए साइडबार में वेंडर का कोटेशन दर्ज करें।",
-                is_hi,
-            )
-        )
-    elif res["verdict"] == "OVERPRICED":
-        st.error(
-            tr(
-                f"**Overpriced Quote (+{res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,} (+₹{res['diff']:,}). **Ask for:** itemized **DCR module** & **inverter** pricing, separate civil/BOS line items, and milestone-linked payment terms.",
-                f"**अत्यधिक महंगा कोटेशन (+{res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,} (+₹{res['diff']:,})। **जांचें:** **DCR मॉड्यूल** और **इनवर्टर** की अलग-अलग कीमत, सिविल/BOS विवरण और चरणबद्ध भुगतान।",
-                is_hi,
-            )
-        )
-    elif res["verdict"] == "SUSPICIOUSLY_LOW":
-        st.warning(
-            tr(
-                f"**Unusually Low Quote ({res['diff_pct']}%):** Quoted ₹{res['quote']:,} vs benchmark ₹{res['bench']:,}. **Verify:** **ALMM / DCR** certificates, hot-dip **GI structure** thickness (**≥80 µm**), and AC/DC surge protection & earthing.",
-                f"**असामान्य रूप से कम कोटेशन ({res['diff_pct']}%):** कोटेशन ₹{res['quote']:,} बनाम मानक ₹{res['bench']:,}। **सत्यापित करें:** **ALMM / DCR** प्रमाणपत्र, **GI स्ट्रक्चर** की मोटाई (**≥80 µm**) और अर्थिंग/सर्ज सुरक्षा।",
-                is_hi,
-            )
-        )
-    else:
-        st.success(
-            tr(
-                f"**Fair Market Price ({res['diff_pct']:+}%):** Quoted ₹{res['quote']:,} aligns closely with the ₹{res['bench']:,} benchmark. Still confirm **ALMM/DCR** serials and **BIS** compliance before paying an advance.",
-                f"**उचित बाजार मूल्य ({res['diff_pct']:+}%):** कोटेशन ₹{res['quote']:,} मानक लागत ₹{res['bench']:,} के अनुरूप है। अग्रिम भुगतान से पहले **ALMM/DCR** और **BIS** विवरण अवश्य जांचें।",
-                is_hi,
-            )
-        )
-
-    st.subheader(tr("AI engineering & quote insights", "AI इंजीनियरिंग और कोटेशन विश्लेषण", is_hi))
-    detail_mode = st.radio(
-        tr("Report Depth", "रिपोर्ट का स्तर", is_hi),
-        [
-            tr("Concise (4 Key Bullets)", "संक्षिप्त (4 मुख्य बिंदु)", is_hi),
-            tr("Detailed Customer Audit (Actionable)", "विस्तृत ग्राहक ऑडिट (संपूर्ण विवरण)", is_hi),
-        ],
-        horizontal=True,
-        key="audit_depth_opt",
-    )
-    is_detailed = "Detailed" in detail_mode or "विस्तृत" in detail_mode
-
-    if st.button(tr("Get my solar report", "मेरी सोलर रिपोर्ट प्राप्त करें", is_hi), key="run_ai_btn"):
-        should_skip = smart_skip and uploaded_img is None and res["verdict"] in ("NO_QUOTE", "FAIR")
-        if demo_mode or should_skip:
-            reason = (
-                tr("Demo mode active", "डेमो मोड सक्रिय है", is_hi)
-                if demo_mode
-                else tr("Smart-skip saved tokens (no quote anomaly or image uploaded)", "स्मार्ट-स्किप ने टोकन बचाए (कोई असामान्य कीमत या फोटो नहीं है)", is_hi)
-            )
-            st.session_state["ai_audit_state"] = {
-                "type": "skip",
-                "msg": tr(
-                    f"**{reason}:** System sizing (**{res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}**), **₹{res['sub']:,}** subsidy, and **{res['payback']}-yr** payback are already verified deterministically.",
-                    f"**{reason}:** सिस्टम क्षमता (**{res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}**), **₹{res['sub']:,}** सब्सिडी, और **{res['payback']}-वर्षीय** पेबैक पहले ही सटीक रूप से सत्यापित हैं।",
-                    is_hi,
-                ),
-            }
-        elif not api_key:
-            st.session_state["ai_audit_state"] = {
-                "type": "warn",
-                "msg": tr("Add `GEMINI_API_KEY` in Streamlit Secrets to run AI analysis.", "AI विश्लेषण चलाने के लिए Streamlit Secrets में `GEMINI_API_KEY` जोड़ें।", is_hi),
-            }
-        else:
-            img_part = prepare_image(uploaded_img)
-            lang_rule = "Hindi (Devanagari)" if is_hi else "English"
-            strict_grounding = (
-                f"You are an Indian solar regulatory & electrical engineer advising a real customer in {state}. "
-                f"Respond strictly in {lang_rule}. "
-                f"FORMATTING & ACCURACY RULES: "
-                f"1. Start every bullet with a **bold label** (e.g., **DISCOM & Load:**) and put **bold** around key rupee figures, percentages, standards (**ALMM**, **DCR**, **BIS**), and action items so key takeaways stand out immediately. "
-                f"2. Rely ONLY on verified MNRE PM Surya Ghar / PM-KUSUM rules, BIS/ALMM standards, and the exact inputs provided below. "
-                f"3. NEVER invent bank loan interest rates, unverified state subsidies, or vendor names. If a local utility rule varies by circle, explicitly advise verifying on pmsuryaghar.gov.in or {st_info['discom']}. "
-                f"4. Preserve these exact numbers verbatim: Benchmark ₹{res['bench']:,}, Subsidy ₹{res['sub']:,}, Net Cost ₹{res['net']:,}. "
-            )
-
-            if is_detailed:
-                sys_p = strict_grounding + (
-                    "Format as a crisp, high-contrast customer guide using 4 bold-headed bulleted sections: "
-                    "**1. DISCOM & Sanctioned Load Action:** ..., "
-                    "**2. Mandatory ALMM/DCR & BIS Hardware:** ..., "
-                    "**3. Earthing, Surge & Structure Safety:** ..., and "
-                    "**4. Payment Milestones & Subsidy Safeguards:** ..."
-                )
-                tok_limit = 850
-            else:
-                sys_p = strict_grounding + "Respond using strictly 4 punchy bullet points starting with **bold labels** and bold key facts, with no extra headings."
-                tok_limit = 450
-
-            usr_p = (
-                f"Audit this {'rooftop solar' if is_rooftop else res['scheme_code']} configuration in {state} "
-                f"(Utility: {st_info['discom']}, Regulator: {st_info['regulator']}). "
-                f"Size: {res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}, "
-                f"Quote: ₹{res['quote']:,} ({res['verdict']}). "
-                + (
-                    "Carefully inspect the uploaded quote/bill image: list visible prices or equipment specs, compare against the ₹{:,} benchmark, and flag any missing DCR/ALMM or earthing items.".format(res["bench"])
-                    if img_part
-                    else "Give practical, legally accurate verification steps the customer must check before signing a vendor agreement."
-                )
-            )
-            txt, metrics = run_llm(
-                api_key,
-                engine_choice,
-                sys_p,
-                usr_p,
-                image_part=img_part,
-                max_tokens=tok_limit,
-                stream=False,
-                render_inline=False,
-            )
-            if txt:
-                st.session_state["ai_audit_state"] = {
-                    "type": "ai",
-                    "text": txt,
-                    "metrics": metrics,
-                }
-
-    ai_state = st.session_state.get("ai_audit_state")
-    if ai_state:
-        if ai_state["type"] == "skip":
-            st.success(ai_state["msg"])
-        elif ai_state["type"] == "warn":
-            st.warning(ai_state["msg"])
-        elif ai_state["type"] == "ai":
-            st.markdown(ai_state["text"])
-            if ai_state.get("metrics"):
-                _render_eff(ai_state["metrics"])
-
 # --- TAB 2: Rooftop Photo Shading Analyzer & Local Verified Installers ---
 with tab2:
     st.subheader(tr("AI rooftop shading & obstacle analyzer", "AI छत छाया और अवरोध विश्लेषक", is_hi))
@@ -801,7 +807,10 @@ with tab2:
             st.info(f"**{tr('Sample guidance, not an analysis of your photo.', 'नमूना मार्गदर्शन, आपकी फोटो का विश्लेषण नहीं।', is_hi)}**")
         else:
             st.success(f"**{tr('Site survey findings:', 'साइट सर्वेक्षण निष्कर्ष:', is_hi)}**")
-        st.markdown(roof_state["text"])
+        with st.container():
+            H('<div class="ai-report-box">')
+            st.markdown(roof_state["text"])
+            H('</div>')
         if is_rooftop:
             st.caption(
                 tr(
