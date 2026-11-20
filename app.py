@@ -86,12 +86,15 @@ PRESET_LABELS = {
 }
 if "active_preset" not in st.session_state:
     st.session_state["active_preset"] = "custom"
+if "quote_in" not in st.session_state:
+    st.session_state["quote_in"] = 0
 
 
 def _apply_preset(key: str):
     st.session_state["active_preset"] = key
-    for wk in ("state_in", "sector_in", "bill_in", "roof_in", "sanc_in", "irr_in", "hp_in", "depth_in", "diesel_in", "quote_in"):
+    for wk in ("state_in", "sector_in", "bill_in", "roof_in", "sanc_in", "irr_in", "hp_in", "depth_in", "diesel_in"):
         st.session_state.pop(wk, None)
+    st.session_state["quote_in"] = 285000 if key == "overpriced" else (203000 if key == "home" else 0)
 
 
 # ---------------------------------------------------------
@@ -215,8 +218,13 @@ with st.sidebar:
 
     st.divider()
     st.markdown(f"### {tr('Vendor quote & OCR', 'वेंडर कोटेशन और OCR', is_hi)}")
-    default_quote = 285000 if is_preset_overpriced else (203000 if p_key == "home" else 0)
-    quote = st.number_input(tr("Installer Quoted Total (₹)", "वेंडर की कुल कीमत (₹)", is_hi), 0, 5000000, default_quote, 5000, key="quote_in")
+    quote = st.number_input(
+        tr("Installer Quoted Total (₹)", "वेंडर की कुल कीमत (₹)", is_hi),
+        0,
+        5000000,
+        step=5000,
+        key="quote_in",
+    )
     uploaded_img = st.file_uploader(
         tr("Upload Quote / Bill Image (Optional)", "कोटेशन / बिल की फोटो अपलोड करें", is_hi),
         type=["png", "jpg", "jpeg"],
@@ -317,31 +325,44 @@ else:
         else f"{res['head_m']}m {tr('head', 'हेड', is_hi)} · {res['pump_type']} {tr('pump', 'पंप', is_hi)}"
     )
 
-quote_row_html = ""
 if quote > 0:
-    quote_row_html = (
-        f'<div class="ledger-row">'
-        f'<span class="lbl">{tr("Your installer&#39;s quote", "आपके वेंडर का कोटेशन", is_hi)}</span>'
-        f'<span class="dots"></span>'
-        f'<span class="amt">₹{quote:,}</span>'
-        f'</div>'
+    diff_bench = res["bench"] - quote
+    diff_note = (
+        tr(f"₹{diff_bench:,} below benchmark", f"मानक से ₹{diff_bench:,} कम", is_hi)
+        if diff_bench >= 0
+        else tr(f"₹{abs(diff_bench):,} above benchmark", f"मानक से ₹{abs(diff_bench):,} अधिक", is_hi)
     )
+    top_cost_html = f"""
+      <div class="ledger-row">
+        <span class="lbl">{tr("Your installer&#39;s quote", "आपके वेंडर का कोटेशन", is_hi)}</span>
+        <span class="dots"></span>
+        <span class="amt">₹{quote:,}</span>
+      </div>
+      <div class="ledger-row" style="font-size:0.84rem;color:#5A6B62;padding-top:0;">
+        <span class="lbl">{tr("MNRE benchmark cost", "MNRE मानक लागत", is_hi)} ({html.escape(diff_note)})</span>
+        <span class="dots"></span>
+        <span>₹{res['bench']:,}</span>
+      </div>
+    """
+else:
+    top_cost_html = f"""
+      <div class="ledger-row">
+        <span class="lbl">{tr("Benchmark cost", "मानक लागत (बेंचमार्क)", is_hi)}</span>
+        <span class="dots"></span>
+        <span class="amt">₹{res['bench']:,}</span>
+      </div>
+    """
 
 with led_col:
     H(
         f"""
         <div class="ledger">
-          <div class="ledger-row">
-            <span class="lbl">{tr("Benchmark cost", "मानक लागत (बेंचमार्क)", is_hi)}</span>
-            <span class="dots"></span>
-            <span class="amt">₹{res['bench']:,}</span>
-          </div>
+          {top_cost_html}
           <div class="ledger-row">
             <span class="lbl">{tr("Government subsidy", "सरकारी सब्सिडी", is_hi)} ({html.escape(split_note)})</span>
             <span class="dots"></span>
             <span class="amt">− ₹{res['sub']:,}</span>
           </div>
-          {quote_row_html}
           <div class="ledger-total">
             <span class="lbl">{tr("You pay", "आपका वास्तविक खर्च", is_hi)}</span>
             <span class="amt">₹{res['net']:,}</span>
