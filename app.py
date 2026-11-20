@@ -86,15 +86,23 @@ PRESET_LABELS = {
 }
 if "active_preset" not in st.session_state:
     st.session_state["active_preset"] = "custom"
-if "quote_in" not in st.session_state:
-    st.session_state["quote_in"] = 0
 
 
 def _apply_preset(key: str):
     st.session_state["active_preset"] = key
-    for wk in ("state_in", "sector_in", "bill_in", "roof_in", "sanc_in", "irr_in", "hp_in", "depth_in", "diesel_in"):
+    for wk in (
+        "state_in",
+        "sector_in",
+        "bill_in",
+        "roof_in",
+        "sanc_in",
+        "irr_in",
+        "hp_in",
+        "depth_in",
+        "diesel_in",
+        f"quote_in_{key}",
+    ):
         st.session_state.pop(wk, None)
-    st.session_state["quote_in"] = 285000 if key == "overpriced" else (203000 if key == "home" else 0)
 
 
 # ---------------------------------------------------------
@@ -118,7 +126,6 @@ with st.sidebar:
 
     p_key = st.session_state["active_preset"]
     is_preset_home = p_key in ("home", "overpriced")
-    is_preset_overpriced = p_key == "overpriced"
     is_preset_farmer = p_key == "farmer"
 
     st.divider()
@@ -218,12 +225,14 @@ with st.sidebar:
 
     st.divider()
     st.markdown(f"### {tr('Vendor quote & OCR', 'वेंडर कोटेशन और OCR', is_hi)}")
+    default_quote = 285000 if p_key == "overpriced" else (203000 if p_key == "home" else 0)
     quote = st.number_input(
         tr("Installer Quoted Total (₹)", "वेंडर की कुल कीमत (₹)", is_hi),
         0,
         5000000,
+        value=default_quote,
         step=5000,
-        key="quote_in",
+        key=f"quote_in_{p_key}",
     )
     uploaded_img = st.file_uploader(
         tr("Upload Quote / Bill Image (Optional)", "कोटेशन / बिल की फोटो अपलोड करें", is_hi),
@@ -831,8 +840,8 @@ with tab2:
             else:
                 st.info(
                     tr(
-                        "Demo only: nothing was sent or stored.",
-                        "केवल डेमो: कुछ भी भेजा या संग्रहीत नहीं किया गया है।",
+                        f"Demo only: request for {chosen_vendor} was not sent or stored.",
+                        f"केवल डेमो: {chosen_vendor} के लिए अनुरोध भेजा या संग्रहीत नहीं किया गया है।",
                         is_hi,
                     )
                 )
