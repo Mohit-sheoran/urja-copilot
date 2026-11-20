@@ -378,13 +378,6 @@ for idx, p_id in enumerate(["home", "overpriced", "farmer"], start=1):
             _apply_preset(p_id)
             st.rerun()
 
-st.caption(
-    tr(
-        "Tip: Open the top-left sidebar anytime to customize bill, roof area, pump HP, or installer quote.",
-        "सुझाव: बिल, छत का क्षेत्रफल, पंप HP या कोटेशन बदलने के लिए ऊपरी-बाएँ मेनू से साइडबार खोलें।",
-        is_hi,
-    )
-)
 
 led_col, stat_col = st.columns([1.3, 1])
 
@@ -468,7 +461,6 @@ with led_col:
         </div>
         """
     )
-
 with stat_col:
     pb_txt = f"{res['payback']} {tr('Years', 'वर्ष', is_hi)}" if res["payback"] < 50 else "N/A"
     H(
@@ -484,45 +476,49 @@ with stat_col:
           <div class="kpi-sub">₹{res['save_yr1']:,}/{tr("yr", "वर्ष", is_hi)} · {res['co2_yr']}T CO₂</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-title">{tr("25-Year net savings", "25-वर्षीय शुद्ध बचत", is_hi)}</div>
+          <div class="kpi-title">{tr("25-year net savings", "25-वर्षीय शुद्ध बचत", is_hi)}</div>
           <p class="kpi-value">{html.escape(_fmt_lakh(res['net_25yr'], is_hi))}</p>
-          <div class="kpi-sub">₹{res['net_25yr']:,} {tr("after O&M & degradation", "रखरखाव व गिरावट के बाद", is_hi)}</div>
+          <div class="kpi-sub">₹{res['net_25yr']:,} {tr("cumulative net", "संचयी शुद्ध बचत", is_hi)}</div>
+        </div>
+        """
+    )
+    if quote > 0:
+        diff_val = quote - res["bench"]
+        verdict_line = (
+            tr(f"₹{diff_val:,} above benchmark. See Quote Audit", f"मानक से ₹{diff_val:,} अधिक। कोटेशन ऑडिट देखें", is_hi)
+            if diff_val > 0
+            else tr(f"₹{abs(diff_val):,} below benchmark. See Quote Audit", f"मानक से ₹{abs(diff_val):,} कम। कोटेशन ऑडिट देखें", is_hi)
+        )
+        st.caption(verdict_line)
+
+if is_rooftop:
+    H(
+        f"""
+        <div class="ba-strip">
+          <b>{tr("Before vs. after solar (estimate):", "सोलर से पहले बनाम बाद (अनुमान):", is_hi)}</b>
+          {tr(
+              f"₹{res['bill']:,}/mo bill → ₹{res['new_bill']:,}/mo (before fixed charges) · ≈ ₹{res['save_yr1']:,}/yr saved",
+              f"₹{res['bill']:,}/माह बिल → ₹{res['new_bill']:,}/माह (फिक्स्ड चार्ज से पहले) · ≈ ₹{res['save_yr1']:,}/वर्ष बचत",
+              is_hi,
+          )}
+        </div>
+        """
+    )
+else:
+    H(
+        f"""
+        <div class="ba-strip">
+          <b>{tr("Before vs. after solar (estimate):", "सोलर से पहले बनाम बाद (अनुमान):", is_hi)}</b>
+          {tr(
+              f"Current pumping cost: {html.escape(str(res['economics_note']))} · ≈ ₹{res['save_yr1']:,}/yr estimated savings",
+              f"वर्तमान सिंचाई लागत: {html.escape(str(res['economics_note']))} · ≈ ₹{res['save_yr1']:,}/वर्ष अनुमानित बचत",
+              is_hi,
+          )}
         </div>
         """
     )
 
-if is_rooftop:
-    st.info(
-        f"**{tr('Bill impact (estimate):', 'बिल प्रभाव (अनुमान):', is_hi)}** "
-        + tr(
-            f"your ₹{res['bill']:,}/month bill falls to about ₹{res['new_bill']:,} (before fixed charges), saving ≈ ₹{res['save_yr1']:,} a year.",
-            f"आपका ₹{res['bill']:,}/माह का बिल घटकर लगभग ₹{res['new_bill']:,} रह जाएगा, जिससे सालाना ≈ ₹{res['save_yr1']:,} की बचत होगी।",
-            is_hi,
-        )
-    )
-    st.caption(res["load_note"])
-else:
-    st.info(f"**{tr('Regional Irrigation Economics:', 'क्षेत्रीय सिंचाई अर्थशास्त्र:', is_hi)}** {res['economics_note']}")
-    if res.get("cap_note"):
-        st.caption(res["cap_note"])
-    if res["depth_ft"] > 300:
-        st.warning(
-            tr(
-                f"**Deep Borewell ({res['depth_ft']} ft / {res['head_m']}m head):** Requires a high-head multi-stage submersible pump (12–16 stages) and heavy-duty riser pipe; standard low-head pumps will fail to lift water.",
-                f"**गहरा बोरवेल ({res['depth_ft']} फीट / {res['head_m']}m हेड):** इसके लिए हाई-हेड मल्टी-स्टेज सबमर्सिबल पंप (12–16 स्टेज) आवश्यक है; सामान्य पंप पानी नहीं उठा पाएंगे।",
-                is_hi,
-            )
-        )
-    elif res["hp"] < res["min_hp"]:
-        st.warning(
-            tr(
-                f"{res['depth_ft']} ft depth ({res['head_m']}m head) typically requires at least a **{res['min_hp']} HP** pump.",
-                f"{res['depth_ft']} फीट गहराई ({res['head_m']}m हेड) के लिए आमतौर पर कम से कम **{res['min_hp']} HP** पंप की आवश्यकता होती है।",
-                is_hi,
-            )
-        )
-
-act_c1, act_c2 = st.columns([1.2, 1.4])
+act_c1, act_c2 = st.columns([1, 1])
 with act_c1:
     wa_msg = (
         f"UrjaMitra Solar Estimate ({state})\n"
@@ -534,21 +530,23 @@ with act_c1:
     st.link_button(tr("Share on WhatsApp", "WhatsApp पर साझा करें", is_hi), wa_url)
 with act_c2:
     st.download_button(
-        tr("Download my solar summary", "मेरा सोलर सारांश डाउनलोड करें", is_hi),
+        tr("Download summary", "सारांश डाउनलोड करें", is_hi),
         data=_build_summary_html(state, st_info, res, quote, is_rooftop, is_hi),
         file_name=f"UrjaMitra_Summary_{state}.html",
         mime="text/html",
     )
 
-with st.expander(tr("Sources & assumptions (verify before use)", "स्रोत और मान्यताएँ (उपयोग से पहले जांचें)", is_hi), expanded=False):
+with st.expander(tr("How this is calculated and sources", "यह कैसे गणना किया जाता है और स्रोत", is_hi), expanded=False):
     st.markdown(
         tr(
+            f"- **Sidebar & Load Note:** {res['load_note'] if is_rooftop else res.get('cap_note') or res['economics_note']}\n"
             "- **PM Surya Ghar CFA & Benchmarks:** Indicative slab & benchmark modeling based on MNRE PM Surya Ghar Muft Bijli Yojana guidelines (verify current slabs and DCR rules on `pmsuryaghar.gov.in`).\n"
-            "- **PM-KUSUM State Shares & Tariffs:** Central + state share splits and state utility/irrigation figures are indicative; where a state uses a default placeholder (such as **30% state**), treat it as a *scheme default; your state may differ* and verify with your SNA/DISCOM.\n"
-            "- **ROI & Degradation:** 25-year projection models annual generation degradation, O&M, and tariff escalation — verify exact tariff & net-metering terms with your local DISCOM before use.",
+            "- **PM-KUSUM State Shares & Tariffs:** Central + state share splits are indicative; where a state uses a default placeholder (such as **30% state**), treat it as a *scheme default; your state may differ* and verify with your SNA/DISCOM.\n"
+            "- **ROI & Degradation:** 25-year projection uses the cash-flow series after O&M and degradation — verify exact tariff & net-metering terms with your local DISCOM before use.",
+            f"- **लोड व तकनीकी नोट:** {res['load_note'] if is_rooftop else res.get('cap_note') or res['economics_note']}\n"
             "- **PM सूर्य घर CFA व मानक लागत:** MNRE PM सूर्य घर मार्गदर्शिका पर आधारित संकेतात्मक अनुमान (वर्तमान स्लैब और DCR नियम `pmsuryaghar.gov.in` पर सत्यापित करें)।\n"
             "- **PM-कुसुम राज्य हिस्सा व दरें:** केंद्र/राज्य अनुपात संकेतात्मक हैं; जहाँ डिफ़ॉल्ट मान (जैसे **30% राज्य**) है, वहाँ *योजना डिफ़ॉल्ट; आपके राज्य में अंतर संभव है* मानें और DISCOM/एजेंसी से पुष्टि करें।\n"
-            "- **25-वर्षीय ROI:** पैनल गिरावट, रखरखाव और टैरिफ वृद्धि पर आधारित अनुमान — उपयोग से पहले अपने DISCOM से पुष्टि करें।",
+            "- **25-वर्षीय ROI:** पैनल गिरावट और रखरखाव के बाद नकदी प्रवाह पर आधारित — उपयोग से पहले अपने DISCOM से पुष्टि करें।",
             is_hi,
         )
     )
