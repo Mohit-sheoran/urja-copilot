@@ -226,6 +226,7 @@ with st.sidebar:
         step=5000,
         key="quote_in",
     )
+    st.session_state["preset_quote_val"] = quote
     uploaded_img = st.file_uploader(
         tr("Upload Quote / Bill Image (Optional)", "कोटेशन / बिल की फोटो अपलोड करें", is_hi),
         type=["png", "jpg", "jpeg"],
