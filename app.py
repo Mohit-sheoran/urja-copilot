@@ -17,6 +17,7 @@ from core.config import AUTO, STATE_DB, tr
 from core.styles import H, inject_css
 from core.solar_engine import build_bom, build_letter, calc_pump, calc_rooftop
 from core.ai_layer import (
+    extract_quote_fields,
     get_api_key,
     list_models,
     polish_letter,
@@ -117,6 +118,79 @@ def _build_summary_html(state: str, st_info: dict, res: dict, quote: int, is_roo
 </html>"""
 
 
+def _verify_extracted_quote_in_code(extracted: dict, res: dict, is_rooftop: bool, is_hi: bool) -> list[str]:
+    """Deterministic Python checks on structured fields read by Gemini Vision."""
+    flags: list[str] = []
+    ext_price = float(extracted.get("quoted_total_inr") or 0)
+    ext_size = float(extracted.get("system_size_value") or 0)
+    expected_size = float(res["rec_kw"] if is_rooftop else res["hp"])
+
+    if ext_price > 0:
+        diff = round(ext_price - res["bench"])
+        pct = round((diff / res["bench"]) * 100, 1) if res["bench"] else 0
+        if pct > 12:
+            flags.append(
+                tr(
+                    f"**Price Check (Overpriced +{pct}%):** Quote shows **₹{int(ext_price):,}** vs MNRE benchmark **₹{res['bench']:,}** (+₹{diff:,}).",
+                    f"**कीमत जांच (महंगा +{pct}%):** कोटेशन में **₹{int(ext_price):,}** है बनाम मानक **₹{res['bench']:,}** (+₹{diff:,})।",
+                    is_hi,
+                )
+            )
+        elif pct < -15:
+            flags.append(
+                tr(
+                    f"**Price Check (Unusually Low {pct}%):** Quote shows **₹{int(ext_price):,}** vs benchmark **₹{res['bench']:,}** — verify component specs.",
+                    f"**कीमत जांच (असामान्य रूप से कम {pct}%):** कोटेशन में **₹{int(ext_price):,}** है बनाम मानक **₹{res['bench']:,}** — उपकरण विवरण जांचें।",
+                    is_hi,
+                )
+            )
+        else:
+            flags.append(
+                tr(
+                    f"**Price Check (Fair {pct:+}%):** Quote **₹{int(ext_price):,}** aligns with benchmark **₹{res['bench']:,}**.",
+                    f"**कीमत जांच (उचित {pct:+}%):** कोटेशन **₹{int(ext_price):,}** मानक **₹{res['bench']:,}** के अनुरूप है।",
+                    is_hi,
+                )
+            )
+    else:
+        flags.append(tr("**Price Check:** Total quote amount was not clearly readable in the photo.", "**कीमत जांच:** फोटो में कुल कीमत स्पष्ट रूप से पढ़ने योग्य नहीं थी।", is_hi))
+
+    if ext_size > 0 and abs(ext_size - expected_size) >= 0.5:
+        flags.append(
+            tr(
+                f"**Capacity Mismatch:** Quote lists **{ext_size:g} {extracted.get('system_size_unit', '')}**, while your profile sizing is **{expected_size:g} {'kW' if is_rooftop else 'HP'}**.",
+                f"**क्षमता अंतर:** कोटेशन में **{ext_size:g} {extracted.get('system_size_unit', '')}** लिखा है, जबकि आपकी प्रोफ़ाइल के अनुसार **{expected_size:g} {'kW' if is_rooftop else 'HP'}** है।",
+                is_hi,
+            )
+        )
+
+    if not extracted.get("is_dcr_mentioned"):
+        flags.append(
+            tr(
+                "**Missing DCR Clause:** Domestic Content Requirement (**DCR**) is not explicitly stated — mandatory for PM Surya Ghar / PM-KUSUM subsidy.",
+                "**DCR विवरण अनुपस्थित:** कोटेशन में **DCR** स्पष्ट रूप से नहीं लिखा है — सब्सिडी के लिए यह अनिवार्य है।",
+                is_hi,
+            )
+        )
+    if not extracted.get("is_almm_mentioned"):
+        flags.append(
+            tr(
+                "**Missing ALMM Mention:** Ensure modules are **ALMM-listed** in the final contract.",
+                "**ALMM उल्लेख अनुपस्थित:** अंतिम अनुबंध में **ALMM-सूचीबद्ध** मॉड्यूल सुनिश्चित करें।",
+                is_hi,
+            )
+        )
+    if not extracted.get("earthing_and_spd_included"):
+        flags.append(
+            tr(
+                "**Safety BoM Check:** AC/DC **earthing** and **surge protection (SPD)** were not explicitly detected in the quote.",
+                "**सुरक्षा उपकरण जांच:** कोटेशन में AC/DC **अर्थिंग** और **सर्ज सुरक्षा (SPD)** स्पष्ट रूप से नहीं दिखी।",
+                is_hi,
+            )
+        )
+    return flags
+
+
 # ---------------------------------------------------------
 # 1. Top-Right Language Toggle (Main Page)
 # ---------------------------------------------------------
@@ -163,7 +237,10 @@ def _apply_preset(key: str):
         "hp_in",
         "depth_in",
         "diesel_in",
-        f"quote_in_{key}",
+        "quote_in_custom",
+        "quote_in_home",
+        "quote_in_overpriced",
+        "quote_in_farmer",
     ):
         st.session_state.pop(wk, None)
 
@@ -378,7 +455,6 @@ for idx, p_id in enumerate(["home", "overpriced", "farmer"], start=1):
             _apply_preset(p_id)
             st.rerun()
 
-
 led_col, stat_col = st.columns([1.3, 1])
 
 if is_rooftop:
@@ -461,6 +537,7 @@ with led_col:
         </div>
         """
     )
+
 with stat_col:
     pb_txt = f"{res['payback']} {tr('Years', 'वर्ष', is_hi)}" if res["payback"] < 50 else "N/A"
     H(
@@ -539,7 +616,7 @@ with act_c2:
 with st.expander(tr("How this is calculated and sources", "यह कैसे गणना किया जाता है और स्रोत", is_hi), expanded=False):
     st.markdown(
         tr(
-            f"- **Sidebar & Load Note:** {res['load_note'] if is_rooftop else res.get('cap_note') or res['economics_note']}\n"
+            f"- **Load & System Note:** {res['load_note'] if is_rooftop else res.get('cap_note') or res['economics_note']}\n"
             "- **PM Surya Ghar CFA & Benchmarks:** Indicative slab & benchmark modeling based on MNRE PM Surya Ghar Muft Bijli Yojana guidelines (verify current slabs and DCR rules on `pmsuryaghar.gov.in`).\n"
             "- **PM-KUSUM State Shares & Tariffs:** Central + state share splits are indicative; where a state uses a default placeholder (such as **30% state**), treat it as a *scheme default; your state may differ* and verify with your SNA/DISCOM.\n"
             "- **ROI & Degradation:** 25-year projection uses the cash-flow series after O&M and degradation — verify exact tariff & net-metering terms with your local DISCOM before use.",
@@ -599,6 +676,47 @@ with tab1:
                 is_hi,
             )
         )
+
+    if uploaded_img is not None:
+        st.divider()
+        st.subheader(tr("Quote photo OCR: LLM reads, code verifies", "कोटेशन फोटो OCR: AI पढ़ता है, कोड सत्यापित करता है", is_hi))
+        if st.button(tr("Extract & verify uploaded quote photo", "अपलोड किए गए कोटेशन की जांच करें", is_hi), key="ocr_verify_btn"):
+            if demo_mode or not api_key:
+                st.info(tr("Connect GEMINI_API_KEY (with Demo mode off) to extract fields from your quote image.", "कोटेशन फोटो पढ़ने के लिए GEMINI_API_KEY जोड़ें और डेमो मोड बंद रखें।", is_hi))
+            else:
+                try:
+                    q_part = prepare_image(uploaded_img)
+                    ext_data, ext_met = extract_quote_fields(api_key, engine_choice, q_part)
+                    st.session_state["extracted_quote_state"] = {"data": ext_data, "metrics": ext_met}
+                except Exception:
+                    st.warning(tr("Could not read structured fields from this image. Try a clearer, well-lit photo.", "इस फोटो से विवरण स्पष्ट रूप से नहीं पढ़ा जा सका। कृपया साफ़ फोटो अपलोड करें।", is_hi))
+
+        ext_state = st.session_state.get("extracted_quote_state")
+        if ext_state:
+            ed = ext_state["data"]
+            v_flags = _verify_extracted_quote_in_code(ed, res, is_rooftop, is_hi)
+            with st.container():
+                H('<div class="ai-report-box">')
+                st.markdown(
+                    tr(
+                        f"**Extracted by Gemini Vision:** Price `₹{int(ed.get('quoted_total_inr') or 0):,}` · "
+                        f"Capacity `{ed.get('system_size_value', 0)} {ed.get('system_size_unit', '')}` · "
+                        f"Panels: `{html.escape(str(ed.get('panel_brand_and_spec', 'Not specified')))}` · "
+                        f"Inverter/Pump: `{html.escape(str(ed.get('inverter_or_pump_spec', 'Not specified')))}`\n\n"
+                        f"**Verified by Deterministic Python Engine:**",
+                        f"**Gemini Vision द्वारा पढ़ा गया:** कीमत `₹{int(ed.get('quoted_total_inr') or 0):,}` · "
+                        f"क्षमता `{ed.get('system_size_value', 0)} {ed.get('system_size_unit', '')}` · "
+                        f"पैनल: `{html.escape(str(ed.get('panel_brand_and_spec', 'Not specified')))}` · "
+                        f"इनवर्टर/पंप: `{html.escape(str(ed.get('inverter_or_pump_spec', 'Not specified')))}`\n\n"
+                        f"**Python नियम इंजन द्वारा सत्यापन:**",
+                        is_hi,
+                    )
+                )
+                for fl in v_flags:
+                    st.markdown(f"- {fl}")
+                H('</div>')
+            if ext_state.get("metrics"):
+                _render_eff(ext_state["metrics"])
 
     st.divider()
     st.subheader(tr("AI engineering & quote insights", "AI इंजीनियरिंग और कोटेशन विश्लेषण", is_hi))
@@ -665,7 +783,7 @@ with tab1:
                 f"Size: {res['rec_kw'] if is_rooftop else res['hp']} {'kW' if is_rooftop else 'HP'}, "
                 f"Quote: ₹{res['quote']:,} ({res['verdict']}). "
                 + (
-                    "Extract visible prices, panel brand/spec, and inverter spec from the quote image, compare against the ₹{:,} benchmark in code context, and flag any missing DCR/ALMM or earthing items.".format(res["bench"])
+                    "Carefully inspect the uploaded quote/bill image: list visible prices or equipment specs, compare against the ₹{:,} benchmark, and flag any missing DCR/ALMM or earthing items.".format(res["bench"])
                     if img_part
                     else "Give practical, legally accurate verification steps the customer must check before signing a vendor agreement."
                 )
@@ -1117,7 +1235,7 @@ with tab4:
     st.markdown(f'<div class="paper-letter">{safe_letter_html}</div>', unsafe_allow_html=True)
     st.download_button(
         tr("Download official letter (.txt)", "आधिकारिक पत्र डाउनलोड करें (.txt)", is_hi),
-        data=display_letter,
+        data=draft_letter,
         file_name=f"UrjaMitra_Application_{state}.txt",
         mime="text/plain",
     )
