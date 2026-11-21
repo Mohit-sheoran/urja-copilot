@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import hashlib
 import time
 from typing import Any
@@ -246,3 +247,131 @@ def polish_letter(api_key: str, model_choice: str, draft_letter: str, lang: str)
     key_digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
     polished = _cached_polish_letter(key_digest, model_choice, draft_letter, lang)
     return polished, True
+  QUOTE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "quoted_total_inr": {
+            "type": "NUMBER",
+            "description": "Total final quote amount in INR (0 if not clearly visible).",
+        },
+        "system_size_value": {
+            "type": "NUMBER",
+            "description": "System capacity in kW or HP (0 if not clearly visible).",
+        },
+        "system_size_unit": {
+            "type": "STRING",
+            "description": "Unit of capacity: 'kW', 'HP', or 'UNKNOWN'.",
+        },
+        "panel_brand_and_spec": {
+            "type": "STRING",
+            "description": "Solar module brand and wattage if listed, else 'Not specified'.",
+        },
+        "is_dcr_mentioned": {
+            "type": "BOOLEAN",
+            "description": "True only if DCR / Domestic Content Requirement is explicitly written.",
+        },
+        "is_almm_mentioned": {
+            "type": "BOOLEAN",
+            "description": "True only if ALMM is explicitly written.",
+        },
+        "inverter_or_pump_spec": {
+            "type": "STRING",
+            "description": "Inverter or solar pump brand/rating if listed, else 'Not specified'.",
+        },
+        "earthing_and_spd_included": {
+            "type": "BOOLEAN",
+            "description": "True if AC/DC earthing or surge protection (SPD) is listed in BoM.",
+        },
+        "unreadable_or_missing_notes": {
+            "type": "STRING",
+            "description": "Brief note on any key item missing or blurry in the document.",
+        },
+    },
+    "required": [
+        "quoted_total_inr",
+        "system_size_value",
+        "system_size_unit",
+        "panel_brand_and_spec",
+        "is_dcr_mentioned",
+        "is_almm_mentioned",
+        "inverter_or_pump_spec",
+        "earthing_and_spd_included",
+        "unreadable_or_missing_notes",
+    ],
+}
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _cached_extract_quote(
+    api_key_hash: str,
+    model_choice: str,
+    image_bytes: bytes,
+    image_mime: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    _ = api_key_hash
+    api_key = get_api_key()
+    if not api_key:
+        raise RuntimeError("Missing GEMINI_API_KEY.")
+
+    models = _order_models(api_key, model_choice, has_image=True)
+    sys_p = (
+        "You extract structured data from Indian solar rooftop or PM-KUSUM pump quotations. "
+        "Extract ONLY facts explicitly visible in the image. Never guess or invent prices or certifications."
+    )
+    usr_p = "Extract all solar quotation fields from this document."
+
+    last_err: Exception | None = None
+    t0 = time.perf_counter()
+    for m_name in models:
+        try:
+            from google import genai  # type: ignore
+            from google.genai import types  # type: ignore
+
+            client = genai.Client(api_key=api_key)
+            resp = client.models.generate_content(
+                model=m_name,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=image_mime),
+                    usr_p,
+                ],
+                config=types.GenerateContentConfig(
+                    system_instruction=sys_p,
+                    response_mime_type="application/json",
+                    response_schema=QUOTE_SCHEMA,
+                    max_output_tokens=450,
+                    temperature=0.0,
+                ),
+            )
+            raw_json = getattr(resp, "text", "") or ""
+            parsed = json.loads(raw_json)
+            latency = round(time.perf_counter() - t0, 2)
+            metrics = {
+                "model": m_name,
+                "latency": latency,
+                "in_tok": 280,
+                "out_tok": max(1, len(raw_json) // 4),
+                "tot_tok": 280 + max(1, len(raw_json) // 4),
+                "saved_pct": max(0, round(((1800 - (280 + len(raw_json) // 4)) / 1800) * 100)),
+            }
+            return parsed, metrics
+        except Exception as exc:
+            last_err = exc
+
+    raise RuntimeError(f"Structured quote extraction failed: {last_err}")
+
+
+def extract_quote_fields(
+    api_key: str,
+    model_choice: str,
+    image_part: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """LLM reads quote photo into strict JSON schema; raises on error so failures aren't cached."""
+    if not api_key or not image_part:
+        raise RuntimeError("API key and quote image are required.")
+    key_digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+    return _cached_extract_quote(
+        key_digest,
+        model_choice,
+        image_part["data"],
+        image_part["mime_type"],
+    )
