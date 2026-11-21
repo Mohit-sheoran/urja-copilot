@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import time
 from typing import Any
 
@@ -16,6 +16,59 @@ _DEFAULT_MODELS = [
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
 ]
+
+QUOTE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "quoted_total_inr": {
+            "type": "NUMBER",
+            "description": "Total final quote amount in INR (0 if not clearly visible).",
+        },
+        "system_size_value": {
+            "type": "NUMBER",
+            "description": "System capacity in kW or HP (0 if not clearly visible).",
+        },
+        "system_size_unit": {
+            "type": "STRING",
+            "description": "Unit of capacity: 'kW', 'HP', or 'UNKNOWN'.",
+        },
+        "panel_brand_and_spec": {
+            "type": "STRING",
+            "description": "Solar module brand and wattage if listed, else 'Not specified'.",
+        },
+        "is_dcr_mentioned": {
+            "type": "BOOLEAN",
+            "description": "True only if DCR / Domestic Content Requirement is explicitly written.",
+        },
+        "is_almm_mentioned": {
+            "type": "BOOLEAN",
+            "description": "True only if ALMM is explicitly written.",
+        },
+        "inverter_or_pump_spec": {
+            "type": "STRING",
+            "description": "Inverter or solar pump brand/rating if listed, else 'Not specified'.",
+        },
+        "earthing_and_spd_included": {
+            "type": "BOOLEAN",
+            "description": "True if AC/DC earthing or surge protection (SPD) is listed in BoM.",
+        },
+        "unreadable_or_missing_notes": {
+            "type": "STRING",
+            "description": "Brief note on any key item missing or blurry in the document.",
+        },
+    },
+    "required": [
+        "quoted_total_inr",
+        "system_size_value",
+        "system_size_unit",
+        "panel_brand_and_spec",
+        "is_dcr_mentioned",
+        "is_almm_mentioned",
+        "inverter_or_pump_spec",
+        "earthing_and_spd_included",
+        "unreadable_or_missing_notes",
+    ],
+}
 
 
 def get_api_key() -> str:
@@ -78,7 +131,6 @@ def _invoke_single_model(
     image_part: dict[str, Any] | None,
     max_tokens: int,
 ) -> str:
-    # Try modern google-genai SDK first, then fall back to google-generativeai
     try:
         from google import genai  # type: ignore
         from google.genai import types  # type: ignore
@@ -247,58 +299,6 @@ def polish_letter(api_key: str, model_choice: str, draft_letter: str, lang: str)
     key_digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
     polished = _cached_polish_letter(key_digest, model_choice, draft_letter, lang)
     return polished, True
-  QUOTE_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "quoted_total_inr": {
-            "type": "NUMBER",
-            "description": "Total final quote amount in INR (0 if not clearly visible).",
-        },
-        "system_size_value": {
-            "type": "NUMBER",
-            "description": "System capacity in kW or HP (0 if not clearly visible).",
-        },
-        "system_size_unit": {
-            "type": "STRING",
-            "description": "Unit of capacity: 'kW', 'HP', or 'UNKNOWN'.",
-        },
-        "panel_brand_and_spec": {
-            "type": "STRING",
-            "description": "Solar module brand and wattage if listed, else 'Not specified'.",
-        },
-        "is_dcr_mentioned": {
-            "type": "BOOLEAN",
-            "description": "True only if DCR / Domestic Content Requirement is explicitly written.",
-        },
-        "is_almm_mentioned": {
-            "type": "BOOLEAN",
-            "description": "True only if ALMM is explicitly written.",
-        },
-        "inverter_or_pump_spec": {
-            "type": "STRING",
-            "description": "Inverter or solar pump brand/rating if listed, else 'Not specified'.",
-        },
-        "earthing_and_spd_included": {
-            "type": "BOOLEAN",
-            "description": "True if AC/DC earthing or surge protection (SPD) is listed in BoM.",
-        },
-        "unreadable_or_missing_notes": {
-            "type": "STRING",
-            "description": "Brief note on any key item missing or blurry in the document.",
-        },
-    },
-    "required": [
-        "quoted_total_inr",
-        "system_size_value",
-        "system_size_unit",
-        "panel_brand_and_spec",
-        "is_dcr_mentioned",
-        "is_almm_mentioned",
-        "inverter_or_pump_spec",
-        "earthing_and_spd_included",
-        "unreadable_or_missing_notes",
-    ],
-}
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
