@@ -1,4 +1,4 @@
-"""Gemini AI helper layer for UrjaMitra (reports, vision, letter polish, and Q&A)."""
+ """Gemini AI helper layer for UrjaMitra (reports, vision, letter polish, and Q&A)."""
 
 from __future__ import annotations
 
