@@ -1,49 +1,50 @@
-# ☀️ UrjaMitra (ऊर्जा मित्र) — Universal All-India Solar & PM-KUSUM Copilot
+# ☀️ UrjaMitra (ऊर्जा मित्र) — Indian Solar & PM-KUSUM Consumer Copilot
 
-**UrjaMitra** is an English/Hindi consumer and farmer decision copilot for **PM Surya Ghar: Muft Bijli Yojana** (residential rooftop solar) and **PM-KUSUM** (agricultural solar pumps, Components B & C). It combines a deterministic Python engineering and subsidy engine with targeted Google Gemini multimodal verification so households and farmers can check system sizing, subsidies, payback, installer quotes, and roof shading before signing an EPC contract.
+**UrjaMitra** is a bilingual (English/Hindi) decision and quote-auditing app for Indian homeowners (**PM Surya Ghar: Muft Bijli Yojana**) and farmers (**PM-KUSUM Components B & C**). It pairs a deterministic Python solar sizing, subsidy, and payback engine with targeted Google Gemini multimodal verification so users can check sizing, subsidies, ROI, installer quotes, and roof shading before committing to an installation.
 
-**Live App:** [UrjaMitra on Streamlit Cloud](https://urja-copilot-j2wrajqvouhrjncwgzcubn.streamlit.app)
+- **Live App:** https://urja-copilot-j2wrajqvouhrjncwgzcubn.streamlit.app
+- **Hackathon:** Homingo Hack Days · Edition 01
 
 ---
 
-## Key Capabilities
+## Problem & Real-World Impact
+
+Homeowners and farmers investing in rooftop solar or solar irrigation pumps face confusing subsidy slabs, state-level utility variations, inflated quotations, and missing compliance clauses (`DCR`, `ALMM`, proper earthing/surge protection) that can put subsidies at risk. UrjaMitra gives users a fast, bilingual check on system sizing, estimated subsidies, 25-year net cashflow, quote red flags, terrace shading, and a ready-to-download DISCOM/nodal agency application draft.
+
+---
+
+## Architecture & Key Features
 
 1. **Deterministic Sizing, Subsidy & Payback Engine (`core/solar_engine.py`)**
-   - **Residential Rooftop (PM Surya Ghar):** Sizes capacity from monthly electricity bills, state tariffs/insolation, and shadow-free roof area (`100 sq. ft./kW`), applies MNRE Central Financial Assistance slabs (up to `₹78,000`), flags sanctioned-load enhancement needs, and models 25-year net cashflow after degradation and O&M.
-   - **Agricultural Irrigation (PM-KUSUM):** Supports Component-B (diesel replacement & new borewell) and Component-C (existing grid pump solarization) across `3 HP`–`10 HP` pumps, total dynamic head calculation, and central + state subsidy splits.
+   - **PM Surya Ghar Rooftop:** Estimates system capacity (`kW`) from monthly electricity bills, state tariffs/insolation, and shadow-free roof area (`100 sq. ft./kW`), applies MNRE Central Financial Assistance slabs (up to `₹78,000`), flags sanctioned-load enhancement needs, and calculates 25-year net savings after degradation and O&M.
+   - **PM-KUSUM Irrigation Pumps:** Models Component-B (diesel replacement & new borewell) and Component-C (existing grid pump solarization) across `3 HP`–`10 HP` pumps, total dynamic head, and central + state subsidy splits.
 
-2. **Quote Photo OCR & Audit (`core/ai_layer.py` + `app.py`)**
-   - **LLM Reads, Code Verifies:** Gemini Vision extracts pre-subsidy gross quote totals, system capacity, panel/inverter specs, and compliance markers (`DCR`, `ALMM`, `earthing/SPD`) into a strict JSON schema, then deterministic Python rules audit pricing against MNRE benchmarks and flag missing compliance clauses.
-   - **One-Click Slot Sync:** Extracted quote totals and system capacities populate directly into the sidebar inputs for instant recalculation.
+2. **Quote Photo OCR & Rule Verification (`core/ai_layer.py`, `app.py`)**
+   - Uses Google Gemini Vision to extract structured quote fields (gross/net amount, system size, panel/inverter specs, and `DCR`/`ALMM`/`earthing/SPD` mentions), followed by deterministic Python checks against MNRE benchmarks and compliance rules, plus one-click slot filling into sidebar inputs.
 
-3. **AI Rooftop Shading Survey & EPC Registry Check (`core/vendor_audit.py`)**
-   - Analyzes uploaded or camera-captured terrace photos for water tanks, parapets, chimneys, and tree shading.
-   - Verifies EPC company registration records via Crustdata B2B company intelligence alongside a PIN-aware installer preview.
-
-4. **Bilingual Official Application & Copilot Q&A**
-   - Generates ready-to-download DISCOM / State Nodal Agency application letters in English and Hindi (Devanagari), with optional AI wording polish that preserves all numeric figures verbatim.
+3. **Roof Shading Survey, Vendor Check, 25-Year ROI & Bilingual Application**
+   - **Roof Survey & Local Installers (`core/vendor_audit.py`):** Analyzes uploaded or live camera roof photos for shading obstacles (water tanks, parapets, chimneys, trees), checks company records via Crustdata when configured, and displays a sample PIN-aware installer preview.
+   - **25-Year ROI & BoM:** Interactive Plotly cumulative cashflow chart with break-even indicator and standard component Bill of Materials.
+   - **Bilingual Support & Official Letter:** Full English and Hindi (`हिंदी`) interface with downloadable DISCOM/nodal agency application letters and optional AI wording polish that preserves numeric figures.
 
 ---
 
-## Architecture & Token Efficiency
+## Reliability, Guardrails & Evaluation
 
-- **Deterministic First, Targeted AI Second:** All financial math, subsidy slabs, benchmark comparisons, and compliance rule checks execute locally in Python (`0` LLM tokens, `<5 ms`). Gemini is invoked only for multimodal quote/roof inspection, tailored engineering audits, letter polishing, and policy Q&A.
-- **Smart-Skip & Caching:** Optional smart-skip bypasses redundant LLM calls when quotes fall within fair benchmark bounds, and `st.cache_data` caches identical prompts/images while avoiding error caching.
-
----
-
-## Representative Verification Scenarios
-
-| Scenario | State & Sector | Key Inputs | Verified Behavior |
-| :--- | :--- | :--- | :--- |
-| **Haryana Home (Preset)** | Haryana · Rooftop | Bill `₹3,200/mo`, `400 sq. ft.`, Quote `₹2,03,000` | Recommends `3.5 kW`, `₹78,000` CFA subsidy, `₹1,25,000` net cost (`FAIR` within benchmark) |
-| **Overpriced Quote (Preset)** | Haryana · Rooftop | Bill `₹3,200/mo`, `400 sq. ft.`, Quote `₹2,85,000` | Flags `+40.4%` (`+₹82,000` above benchmark) and prompts itemized DCR/BOS breakdown |
-| **Rajasthan Farmer (Preset)** | Rajasthan · PM-KUSUM (`DIESEL_B`) | `7.5 HP` DC pump, `180 ft` depth, `90 L/mo` diesel | Sizes `7.5 kWp` array, `₹3,50,000` benchmark, `60%` combined central + state subsidy (`₹2,10,000`) |
-| **Quote Photo OCR Audit** | Haryana · Rooftop | Printed `4 kW` quotation (`₹2,13,000` gross / `₹1,35,000` net) | Extracts gross `₹2,13,000` pre-subsidy cost, verifies `DCR`/`ALMM`/`SPD`, and syncs to sidebar |
+- **Deterministic Math First:** Core calculations and quote-audit checks run deterministically in Python (`0` LLM tokens) so pricing and subsidy math stay predictable.
+- **Graceful Fallbacks & Efficiency:** Supports Demo mode (no API calls), optional smart-skip when quotes are within fair bounds, error-safe handling when API keys or external services are unavailable, and a built-in **15-scenario accuracy suite** in Tab 1 covering rooftop slabs, PM-KUSUM caps, and quote-verification checks.
 
 ---
 
-## Local Setup
+## Tech Stack, APIs & Data Notice
+
+- **Framework & Libraries:** Python, Streamlit, Plotly, Google GenAI (`google-genai`), Pillow.
+- **APIs / Services:** Google Gemini API (`GEMINI_API_KEY`), optional Crustdata API (`CRUSTDATA_API_TOKEN`), and Streamlit Community Cloud.
+- **Data & Accuracy Notice:** Subsidy slabs, MNRE benchmark costs, state PM-KUSUM shares, sample quote images, and local installer listings use indicative, synthetic, or sample data for demonstration purposes only—no real personal data is used or stored. Always verify current scheme rules, net-metering policies, and empanelled vendors on [pmsuryaghar.gov.in](https://pmsuryaghar.gov.in), [pmkusum.mnre.gov.in](https://pmkusum.mnre.gov.in), or your state DISCOM portal.
+
+---
+
+## Local Setup & Run Instructions
 
 ```bash
 git clone [https://github.com/Mohit-sheoran/urja-copilot.git](https://github.com/Mohit-sheoran/urja-copilot.git)
