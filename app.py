@@ -38,7 +38,7 @@ def _get_crustdata_token() -> str:
         return ""
 
 
-def _fmt_lakh(val: float, is_hi: bool) -> str:
+    def _fmt_lakh(val: float, is_hi: bool) -> str:
     """Format INR value cleanly in Indian Lakhs (e.g., ₹2L or ₹2.5 लाख)."""
     if val == 0:
         return "₹0"
