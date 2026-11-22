@@ -35,11 +35,11 @@ def _get_crustdata_token() -> str:
             return str(st.secrets["CRUSTDATA_API_TOKEN"]).strip()
     except Exception:
         pass
-    return "[span_35](start_span)"[span_35](end_span)
+        return ""
 
 
 def _fmt_lakh(val: float, is_hi: bool) -> str:
-    """Format INR value cleanly in Indian Lakhs (e.g., ₹2L or ₹2.5 लाख).""[span_36](start_span)"[span_36](end_span)
+    """Format INR value cleanly in Indian Lakhs (e.g., ₹2L or ₹2.5 लाख)."""
     if val == 0:
         return "₹0"
     lakhs = round(val / 100000.0, 1)
@@ -47,7 +47,7 @@ def _fmt_lakh(val: float, is_hi: bool) -> str:
     abs_l = abs(lakhs)
     num_str = f"{abs_l:g}"
     unit = " लाख" if is_hi else "L"
-    return f"{sign}₹{num_str}{unit}[span_37](start_span)"[span_37](end_span)
+    return f"{sign}₹{num_str}{unit}"
 
 
 def _render_eff(m: dict):
