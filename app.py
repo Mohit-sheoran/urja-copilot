@@ -1,4 +1,4 @@
-"""UrjaMitra (ऊर्जा मित्र) — Universal All-India Solar & PM-KUSUM Entry Point.""[span_21](start_span)"[span_21](end_span)
+"""UrjaMitra (ऊर्जा मित्र) — Universal All-India Solar & PM-KUSUM Entry Point.""[span_1](start_span)"[span_1](end_span)
 
 import html
 import math
@@ -11,11 +11,11 @@ st.set_page_config(
     page_icon="☀️",
     layout="wide",
     initial_sidebar_state="expanded",
-)[span_22](start_span)[span_22](end_span)
+)[span_2](start_span)[span_2](end_span)
 
-from core.config import AUTO, STATE_DB, tr[span_23](start_span)[span_23](end_span)[span_24](start_span)[span_24](end_span)
-from core.styles import H, inject_css[span_25](start_span)[span_25](end_span)[span_26](start_span)[span_26](end_span)
-from core.solar_engine import build_bom, build_letter, calc_pump, calc_rooftop[span_27](start_span)[span_27](end_span)[span_28](start_span)[span_28](end_span)
+from core.config import AUTO, STATE_DB, tr[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)
+from core.styles import H, inject_css[span_5](start_span)[span_5](end_span)[span_6](start_span)[span_6](end_span)
+from core.solar_engine import build_bom, build_letter, calc_pump, calc_rooftop[span_7](start_span)[span_7](end_span)[span_8](start_span)[span_8](end_span)
 from core.ai_layer import (
     extract_quote_fields,
     get_api_key,
@@ -23,10 +23,10 @@ from core.ai_layer import (
     polish_letter,
     prepare_image,
     run_llm,
-)[span_29](start_span)[span_29](end_span)[span_30](start_span)[span_30](end_span)
-from core.vendor_audit import get_local_installers, verify_epc_vendor[span_31](start_span)[span_31](end_span)[span_32](start_span)[span_32](end_span)
+)[span_9](start_span)[span_9](end_span)[span_10](start_span)[span_10](end_span)
+from core.vendor_audit import get_local_installers, verify_epc_vendor[span_11](start_span)[span_11](end_span)[span_12](start_span)[span_12](end_span)
 
-inject_css()[span_33](start_span)[span_33](end_span)[span_34](start_span)[span_34](end_span)
+inject_css()[span_13](start_span)[span_13](end_span)[span_14](start_span)[span_14](end_span)
 
 
 def _get_crustdata_token() -> str:
@@ -35,11 +35,11 @@ def _get_crustdata_token() -> str:
             return str(st.secrets["CRUSTDATA_API_TOKEN"]).strip()
     except Exception:
         pass
-        return ""
+    return "[span_15](start_span)"[span_15](end_span)
 
 
-    def _fmt_lakh(val: float, is_hi: bool) -> str:
-    """Format INR value cleanly in Indian Lakhs (e.g., ₹2L or ₹2.5 लाख)."""
+def _fmt_lakh(val: float, is_hi: bool) -> str:
+    """Format INR value cleanly in Indian Lakhs (e.g., Rs. 2L or Rs. 2.5 लाख)."""
     if val == 0:
         return "₹0"
     lakhs = round(val / 100000.0, 1)
@@ -47,7 +47,7 @@ def _get_crustdata_token() -> str:
     abs_l = abs(lakhs)
     num_str = f"{abs_l:g}"
     unit = " लाख" if is_hi else "L"
-    return f"{sign}₹{num_str}{unit}"
+    return f"{sign}₹{num_str}{unit}[span_16](start_span)"[span_16](end_span)
 
 
 def _render_eff(m: dict):
@@ -61,7 +61,7 @@ def _render_eff(m: dict):
           <span class="eff-chip good">~{m['saved_pct']}% fewer tokens (est. vs 1,800-token baseline)</span>
         </div>
         """
-    )[span_38](start_span)[span_38](end_span)[span_39](start_span)[span_39](end_span)
+    )[span_17](start_span)[span_17](end_span)[span_18](start_span)[span_18](end_span)
 
 
 def _demo_fallback_audit(res: dict, state: str, st_info: dict, is_rooftop: bool, is_hi: bool) -> str:
@@ -80,7 +80,7 @@ def _demo_fallback_audit(res: dict, state: str, st_info: dict, is_rooftop: bool,
         f"- **ALMM / DCR & BIS Hardware:** Insist on **ALMM**-listed **DCR** modules and **BIS**-certified equipment for subsidy compliance.\n"
         f"- **Safety & Structure:** Verify **AC/DC surge protection**, proper **earthing**, and hot-dip **GI structure** (typically **≥80 µm**).\n"
         f"- **Key Figures & Milestones:** Benchmark **₹{res['bench']:,}**, Subsidy **₹{res['sub']:,}**, Net Cost **₹{res['net']:,}** — tie payments to installation/commissioning milestones."
-    )[span_40](start_span)[span_40](end_span)
+    )[span_19](start_span)[span_19](end_span)
 
 
 def _build_summary_html(state: str, st_info: dict, res: dict, quote: int, is_rooftop: bool, is_hi: bool) -> str:
@@ -115,11 +115,11 @@ def _build_summary_html(state: str, st_info: dict, res: dict, quote: int, is_roo
     <p class="meta">Indicative estimate only. Verify exact subsidy slabs, net-metering rules, and empanelled vendors on pmsuryaghar.gov.in or your DISCOM portal before signing any contract.</p>
   </div>
 </body>
-</html>""[span_41](start_span)"[span_41](end_span)
+</html>""[span_20](start_span)"[span_20](end_span)
 
 
 def _verify_extracted_quote_in_code(extracted: dict, res: dict, is_rooftop: bool, is_hi: bool) -> list[str]:
-    """Deterministic Python checks on structured fields read by Gemini Vision.""[span_42](start_span)[span_43](start_span)"[span_42](end_span)[span_43](end_span)
+    """Deterministic Python checks on structured fields read by Gemini Vision.""[span_21](start_span)[span_22](start_span)"[span_21](end_span)[span_22](end_span)
     flags: list[str] = []
     ext_price = float(extracted.get("quoted_total_inr") or 0)
     ext_size = float(extracted.get("system_size_value") or 0)
@@ -188,7 +188,7 @@ def _verify_extracted_quote_in_code(extracted: dict, res: dict, is_rooftop: bool
                 is_hi,
             )
         )
-    return flags[span_44](start_span)[span_44](end_span)
+    return flags[span_23](start_span)[span_23](end_span)
 
 
 # ---------------------------------------------------------
@@ -242,7 +242,7 @@ def _apply_preset(key: str):
         "quote_in_overpriced",
         "quote_in_farmer",
     ):
-        st.session_state.pop(wk, None)[span_45](start_span)[span_45](end_span)
+        st.session_state.pop(wk, None)[span_24](start_span)[span_24](end_span)
 
 
 # ---------------------------------------------------------
@@ -386,7 +386,7 @@ with st.sidebar:
         demo_mode = st.checkbox(tr("Demo mode (no API calls)", "डेमो मोड (बिना API कॉल)", is_hi), value=False, key="demo_mode_opt")
         smart_skip = st.checkbox(tr("Smart-skip AI when quote is fair", "कोटेशन सही होने पर AI स्किप करें", is_hi), value=False, key="smart_skip_opt")
         model_opts = [AUTO] + (list_models(api_key) if api_key else ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"])
-        engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)[span_46](start_span)[span_46](end_span)
+        engine_choice = st.selectbox(tr("Model", "मॉडल", is_hi), model_opts, index=0)[span_25](start_span)[span_25](end_span)
 
 # ---------------------------------------------------------
 # 3. Hero Banner, Calculation, Receipt Ledger & 3 Stat Cards
@@ -626,7 +626,7 @@ with st.expander(tr("How this is calculated and sources", "यह कैसे �
             "- **25-वर्षीय ROI:** पैनल गिरावट और रखरखाव के बाद नकदी प्रवाह पर आधारित — उपयोग से पहले अपने DISCOM से पुष्टि करें।",
             is_hi,
         )
-    )[span_47](start_span)[span_47](end_span)
+    )[span_26](start_span)[span_26](end_span)
 
 # ---------------------------------------------------------
 # 4. Main Workspace Tabs
@@ -639,7 +639,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
         f"📄 {tr('Official Application', 'आधिकारिक आवेदन पत्र', is_hi)}",
         f"💬 {tr('Solar Copilot Q&A', 'सोलर कोपायलट प्रश्नोत्तर', is_hi)}",
     ]
-)[span_48](start_span)[span_48](end_span)
+)[span_27](start_span)[span_27](end_span)
 
 # --- TAB 1 ---
 with tab1:
@@ -929,7 +929,7 @@ with tab1:
           <div class="step-item"><div class="step-num">5</div><div class="step-title">{tr("Subsidy release", "सब्सिडी भुगतान", is_hi)}</div><div class="step-desc">{tr("Central + State subsidy settled directly.", "केंद्र और राज्य सब्सिडी का सीधा निपटान।", is_hi)}</div></div>
         </div>
         """
-    )[span_49](start_span)[span_49](end_span)
+    )[span_28](start_span)[span_28](end_span)
 
 # --- TAB 2 ---
 with tab2:
@@ -1111,7 +1111,7 @@ with tab2:
                         f"केवल डेमो: {chosen_vendor} के लिए अनुरोध भेजा या संग्रहीत नहीं किया गया है।",
                         is_hi,
                     )
-                )[span_50](start_span)[span_50](end_span)
+                )[span_29](start_span)[span_29](end_span)
 
 # --- TAB 3 ---
 with tab3:
@@ -1182,7 +1182,7 @@ with tab3:
           <tbody>{rows_html}</tbody>
         </table>
         """
-    )[span_51](start_span)[span_51](end_span)
+    )[span_30](start_span)[span_30](end_span)
 
 # --- TAB 4 ---
 with tab4:
@@ -1238,7 +1238,7 @@ with tab4:
         data=display_letter,
         file_name=f"UrjaMitra_Application_{state}.txt",
         mime="text/plain",
-    )[span_52](start_span)[span_52](end_span)
+    )[span_31](start_span)[span_31](end_span)
 
 # --- TAB 5 ---
 with tab5:
@@ -1301,7 +1301,7 @@ with tab5:
                         )
                         st.warning(ans)
             if ans:
-                st.session_state.chat_history.append({"role": "assistant", "content": ans})[span_53](start_span)[span_53](end_span)
+                st.session_state.chat_history.append({"role": "assistant", "content": ans})[span_32](start_span)[span_32](end_span)
 
 H(
     f"""
@@ -1313,4 +1313,4 @@ H(
       )}
     </div>
     """
-)[span_54](start_span)[span_54](end_span)
+)[span_33](start_span)[span_33](end_span)
