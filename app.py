@@ -207,8 +207,15 @@ def _verify_extracted_quote_in_code(extracted: dict, res: dict, is_rooftop: bool
     return flags
 
 
-def _apply_extracted_quote_to_inputs(ed: dict, is_rooftop: bool):
-    """Populate custom sidebar slots from extracted quote fields."""
+def _apply_pending_ocr_if_any():
+    """Apply queued OCR field updates BEFORE sidebar widgets are instantiated."""
+    pending = st.session_state.pop("pending_ocr_apply", None)
+    if not pending:
+        return
+
+    ed = pending.get("ed") or {}
+    is_rooftop = bool(pending.get("is_rooftop"))
+
     st.session_state["active_preset"] = "custom"
     ext_price = int(round(float(ed.get("quoted_total_inr") or 0)))
     ext_size = float(ed.get("system_size_value") or 0)
@@ -267,7 +274,7 @@ def _render_ocr_audit_card(ed: dict, v_flags: list[str], is_rooftop: bool, is_hi
             tr("Fill extracted quote & size into sidebar slots", "निकाली गई कीमत और क्षमता को इनपुट में भरें", is_hi),
             key="apply_ocr_to_slots_btn",
         ):
-            _apply_extracted_quote_to_inputs(ed, is_rooftop)
+            st.session_state["pending_ocr_apply"] = {"ed": ed, "is_rooftop": is_rooftop}
             st.rerun()
 
 
@@ -288,6 +295,8 @@ with top_lang_col:
         key="lang_choice",
     )
 is_hi = lang == "Hindi"
+
+_apply_pending_ocr_if_any()
 
 PRESET_KEYS = ["custom", "home", "overpriced", "farmer"]
 PRESET_LABELS = {
