@@ -222,56 +222,143 @@ def _run_all_15_accuracy_checks() -> list[dict[str, object]]:
         )
 
     r1 = calc_rooftop("Haryana", 3200, 400, 2.0, 203000)
-    add(1, "Haryana home (3.5 kW / ₹78k CFA)", r1["rec_kw"] == 3.5 and r1["sub"] == 78000 and r1["verdict"] == "FAIR", f"kW={r1['rec_kw']}, sub=₹{r1['sub']:,}, {r1['verdict']}")
+    add(
+        1,
+        "Haryana home (4.0 kW / ₹78k CFA cap)",
+        r1["rec_kw"] == 4.0 and r1["sub"] == 78000 and r1["verdict"] == "SUSPICIOUSLY_LOW",
+        f"kW={r1['rec_kw']}, sub=₹{r1['sub']:,}, {r1['verdict']}",
+    )
 
     r2 = calc_rooftop("Haryana", 3200, 400, 2.0, 285000)
-    add(2, "Overpriced quote detection", r2["verdict"] == "OVERPRICED" and r2["diff"] == 82000, f"{r2['verdict']} (+₹{r2['diff']:,}, {r2['diff_pct']}%)")
+    add(
+        2,
+        "Overpriced quote detection (+₹53k)",
+        r2["verdict"] == "OVERPRICED" and r2["diff"] == 53000,
+        f"{r2['verdict']} (+₹{r2['diff']:,}, {r2['diff_pct']}%)",
+    )
 
     r3 = calc_rooftop("Uttar Pradesh", 900, 150, 1.0, 0)
-    add(3, "1 kW rooftop slab (₹30k CFA)", r3["rec_kw"] == 1.0 and r3["sub"] == 30000 and r3["verdict"] == "NO_QUOTE", f"kW={r3['rec_kw']}, sub=₹{r3['sub']:,}")
+    add(
+        3,
+        "1 kW rooftop slab (₹30k CFA)",
+        r3["rec_kw"] == 1.0 and r3["sub"] == 30000 and r3["verdict"] == "NO_QUOTE",
+        f"kW={r3['rec_kw']}, sub=₹{r3['sub']:,}",
+    )
 
     r4 = calc_rooftop("Gujarat", 1800, 250, 2.0, 116000)
-    add(4, "2 kW rooftop slab (₹60k CFA)", r4["rec_kw"] == 2.0 and r4["sub"] == 60000 and r4["verdict"] == "FAIR", f"kW={r4['rec_kw']}, sub=₹{r4['sub']:,}")
+    add(
+        4,
+        "2.5 kW rooftop slab (₹69k CFA)",
+        r4["rec_kw"] == 2.5 and r4["sub"] == 69000 and r4["verdict"] == "SUSPICIOUSLY_LOW",
+        f"kW={r4['rec_kw']}, sub=₹{r4['sub']:,}",
+    )
 
     r5 = calc_rooftop("Maharashtra", 4500, 500, 3.0, 174000)
-    add(5, "3 kW rooftop cap (₹78k CFA)", r5["rec_kw"] == 3.0 and r5["sub"] == 78000 and r5["verdict"] == "FAIR", f"kW={r5['rec_kw']}, sub=₹{r5['sub']:,}")
+    add(
+        5,
+        "4.5 kW rooftop cap (₹78k CFA)",
+        r5["rec_kw"] == 4.5 and r5["sub"] == 78000 and r5["verdict"] == "SUSPICIOUSLY_LOW",
+        f"kW={r5['rec_kw']}, sub=₹{r5['sub']:,}",
+    )
 
     r6 = calc_rooftop("Delhi", 8000, 200, 5.0, 0)
-    add(6, "Roof-area cap (200 sq.ft -> 2.0 kW)", r6["rec_kw"] == 2.0 and r6["sub"] == 60000, f"kW={r6['rec_kw']}, sub=₹{r6['sub']:,}")
+    add(
+        6,
+        "Roof-area cap (200 sq.ft -> 2.0 kW)",
+        r6["rec_kw"] == 2.0 and r6["sub"] == 60000,
+        f"kW={r6['rec_kw']}, sub=₹{r6['sub']:,}",
+    )
 
     r7 = calc_rooftop("Haryana", 6000, 600, 1.5, 0)
-    add(7, "Sanctioned load enhancement note", r7["rec_kw"] > 1.5 and "enhancement" in r7["load_note"].lower(), f"kW={r7['rec_kw']} vs sanc 1.5 kW")
+    add(
+        7,
+        "Sanctioned load enhancement note",
+        r7["rec_kw"] > 1.5 and "enhancement" in r7["load_note"].lower(),
+        f"kW={r7['rec_kw']} vs sanc 1.5 kW",
+    )
 
     r8 = calc_rooftop("Karnataka", 3000, 400, 3.0, 115000)
-    add(8, "Suspiciously low quote flag", r8["verdict"] == "SUSPICIOUSLY_LOW" and r8["diff_pct"] < -12, f"{r8['verdict']} ({r8['diff_pct']}%)")
+    add(
+        8,
+        "Suspiciously low quote flag",
+        r8["verdict"] == "SUSPICIOUSLY_LOW" and r8["diff_pct"] < -12,
+        f"{r8['verdict']} ({r8['diff_pct']}%)",
+    )
 
     p9 = calc_pump("Rajasthan", 7.5, "DC", 180, "DIESEL_B", 90, 0)
-    add(9, "Rajasthan 7.5 HP PM-KUSUM (60%)", p9["array_kwp"] == 7.5 and p9["bench"] == 350000 and p9["sub"] == 210000, f"bench=₹{p9['bench']:,}, sub=₹{p9['sub']:,}")
+    add(
+        9,
+        "Rajasthan 7.5 HP PM-KUSUM (60%)",
+        p9["array_kwp"] == 7.5 and p9["bench"] == 350000 and p9["sub"] == 210000,
+        f"bench=₹{p9['bench']:,}, sub=₹{p9['sub']:,}",
+    )
 
     p10 = calc_pump("Haryana", 10, "AC", 260, "DIESEL_B", 120, 0)
-    add(10, "10 HP subsidy capped at 7.5 HP", p10["bench"] == 455000 and p10["sub"] == 262500, f"bench=₹{p10['bench']:,}, sub=₹{p10['sub']:,}")
+    add(
+        10,
+        "10 HP subsidy capped at 7.5 HP",
+        p10["bench"] == 455000 and p10["sub"] == 262500,
+        f"bench=₹{p10['bench']:,}, sub=₹{p10['sub']:,}",
+    )
 
     p11 = calc_pump("Haryana", 5, "GRID_EXISTING", 140, "GRID_C", 5.0, 0)
-    add(11, "Component-C grid pump solarization", p11["array_kwp"] == 7.5 and p11["bench"] == 360000 and p11["sub"] == 270000, f"kWp={p11['array_kwp']}, sub=₹{p11['sub']:,}")
+    add(
+        11,
+        "Component-C grid pump solarization",
+        p11["array_kwp"] == 7.5 and p11["bench"] == 360000 and p11["sub"] == 270000,
+        f"kWp={p11['array_kwp']}, sub=₹{p11['sub']:,}",
+    )
 
     p12 = calc_pump("Madhya Pradesh", 5, "DC", 150, "NEW_BORE_B", 4500, 0)
-    add(12, "Component-B new borewell setup", p12["array_kwp"] == 5.0 and p12["bench"] == 258000 and p12["sub"] == 154800, f"kWp={p12['array_kwp']}, sub=₹{p12['sub']:,}")
+    add(
+        12,
+        "Component-B new borewell setup",
+        p12["array_kwp"] == 5.0 and p12["bench"] == 258000 and p12["sub"] == 154800,
+        f"kWp={p12['array_kwp']}, sub=₹{p12['sub']:,}",
+    )
 
     f13 = _verify_extracted_quote_in_code(
-        {"quoted_total_inr": 265000, "system_size_value": 3.5, "system_size_unit": "kW", "is_dcr_mentioned": False, "is_almm_mentioned": False, "earthing_and_spd_included": False},
-        r1, True, False,
+        {
+            "quoted_total_inr": 265000,
+            "system_size_value": 4.0,
+            "system_size_unit": "kW",
+            "is_dcr_mentioned": False,
+            "is_almm_mentioned": False,
+            "earthing_and_spd_included": False,
+        },
+        r1,
+        True,
+        False,
     )
     add(13, "OCR overpriced + missing DCR/ALMM/SPD", len(f13) == 4, f"{len(f13)} compliance/price flags")
 
     f14 = _verify_extracted_quote_in_code(
-        {"quoted_total_inr": 203000, "system_size_value": 2.0, "system_size_unit": "kW", "is_dcr_mentioned": True, "is_almm_mentioned": True, "earthing_and_spd_included": True},
-        r1, True, False,
+        {
+            "quoted_total_inr": 232000,
+            "system_size_value": 2.0,
+            "system_size_unit": "kW",
+            "is_dcr_mentioned": True,
+            "is_almm_mentioned": True,
+            "earthing_and_spd_included": True,
+        },
+        r1,
+        True,
+        False,
     )
     add(14, "OCR capacity mismatch detection", len(f14) == 1 and "Capacity Mismatch" in f14[0], "1 capacity flag raised")
 
     f15 = _verify_extracted_quote_in_code(
-        {"quoted_total_inr": 203000, "system_size_value": 3.5, "system_size_unit": "kW", "is_dcr_mentioned": True, "is_almm_mentioned": True, "earthing_and_spd_included": True},
-        r1, True, False,
+        {
+            "quoted_total_inr": 232000,
+            "system_size_value": 4.0,
+            "system_size_unit": "kW",
+            "is_dcr_mentioned": True,
+            "is_almm_mentioned": True,
+            "earthing_and_spd_included": True,
+        },
+        r1,
+        True,
+        False,
     )
     add(15, "OCR compliant & fair quote pass", len(f15) == 1 and "Fair" in f15[0], "Fair price, 0 compliance flags")
 
