@@ -22,7 +22,14 @@ QUOTE_SCHEMA = {
     "properties": {
         "quoted_total_inr": {
             "type": "NUMBER",
-            "description": "Total final quote amount in INR (0 if not clearly visible).",
+            "description": (
+                "Total pre-subsidy / gross quotation or material+installation amount in INR. "
+                "Prefer gross/total project cost before deducting subsidy; only use net payable if gross total is absent (0 if not clearly visible)."
+            ),
+        },
+        "amount_basis": {
+            "type": "STRING",
+            "description": "Whether quoted_total_inr came from 'gross_or_total_quote', 'net_payable_after_subsidy', or 'unclear'.",
         },
         "system_size_value": {
             "type": "NUMBER",
@@ -34,11 +41,11 @@ QUOTE_SCHEMA = {
         },
         "panel_brand_and_spec": {
             "type": "STRING",
-            "description": "Solar module brand and wattage if listed, else 'Not specified'.",
+            "description": "Solar module brand, wattage, and count if listed, else 'Not specified'.",
         },
         "is_dcr_mentioned": {
             "type": "BOOLEAN",
-            "description": "True only if DCR / Domestic Content Requirement is explicitly written.",
+            "description": "True only if DCR or Domestic Content Requirement is explicitly written.",
         },
         "is_almm_mentioned": {
             "type": "BOOLEAN",
@@ -54,11 +61,12 @@ QUOTE_SCHEMA = {
         },
         "unreadable_or_missing_notes": {
             "type": "STRING",
-            "description": "Brief note on any key item missing or blurry in the document.",
+            "description": "Brief note on any key item missing, ambiguous, or blurry in the document.",
         },
     },
     "required": [
         "quoted_total_inr",
+        "amount_basis",
         "system_size_value",
         "system_size_unit",
         "panel_brand_and_spec",
@@ -100,7 +108,7 @@ def list_models(api_key: str) -> list[str]:
 
 
 def prepare_image(uploaded_file) -> dict[str, Any] | None:
-    """Convert Streamlit UploadedFile into a standard {'mime_type': ..., 'data': bytes} dict."""
+    """Convert Streamlit UploadedFile into a mime_type and data byte dict."""
     if uploaded_file is None:
         return None
     raw = uploaded_file.getvalue()
@@ -316,9 +324,14 @@ def _cached_extract_quote(
     models = _order_models(api_key, model_choice, has_image=True)
     sys_p = (
         "You extract structured data from Indian solar rooftop or PM-KUSUM pump quotations. "
-        "Extract ONLY facts explicitly visible in the image. Never guess or invent prices or certifications."
+        "Extract ONLY facts explicitly visible in the image. Never guess or invent prices or certifications. "
+        "When both a gross/total project cost before subsidy and a net amount payable after subsidy appear, "
+        "extract the gross/total pre-subsidy cost as quoted_total_inr and set amount_basis to 'gross_or_total_quote'."
     )
-    usr_p = "Extract all solar quotation fields from this document."
+    usr_p = (
+        "Extract all solar quotation fields from this document, prioritizing the total pre-subsidy "
+        "material/installation price before subsidy deductions."
+    )
 
     last_err: Exception | None = None
     t0 = time.perf_counter()
@@ -338,7 +351,7 @@ def _cached_extract_quote(
                     system_instruction=sys_p,
                     response_mime_type="application/json",
                     response_schema=QUOTE_SCHEMA,
-                    max_output_tokens=450,
+                    max_output_tokens=480,
                     temperature=0.0,
                 ),
             )
@@ -348,10 +361,10 @@ def _cached_extract_quote(
             metrics = {
                 "model": m_name,
                 "latency": latency,
-                "in_tok": 280,
+                "in_tok": 290,
                 "out_tok": max(1, len(raw_json) // 4),
-                "tot_tok": 280 + max(1, len(raw_json) // 4),
-                "saved_pct": max(0, round(((1800 - (280 + len(raw_json) // 4)) / 1800) * 100)),
+                "tot_tok": 290 + max(1, len(raw_json) // 4),
+                "saved_pct": max(0, round(((1800 - (290 + len(raw_json) // 4)) / 1800) * 100)),
             }
             return parsed, metrics
         except Exception as exc:
