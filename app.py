@@ -122,8 +122,18 @@ def _verify_extracted_quote_in_code(extracted: dict, res: dict, is_rooftop: bool
     """Deterministic Python checks on structured fields read by Gemini Vision."""
     flags: list[str] = []
     ext_price = float(extracted.get("quoted_total_inr") or 0)
+    amount_basis = str(extracted.get("amount_basis") or "")
     ext_size = float(extracted.get("system_size_value") or 0)
     expected_size = float(res["rec_kw"] if is_rooftop else res["hp"])
+
+    if amount_basis == "net_payable_after_subsidy" and ext_price > 0:
+        flags.append(
+            tr(
+                f"**Subsidy Basis Note:** Extracted amount (`₹{int(ext_price):,}`) appears to be post-subsidy net payable; benchmark comparison uses gross pre-subsidy cost (`₹{res['bench']:,}`).",
+                f"**सब्सिडी आधार नोट:** निकाली गई राशि (`₹{int(ext_price):,}`) सब्सिडी के बाद की शुद्ध राशि प्रतीत होती है; मानक तुलना कुल लागत (`₹{res['bench']:,}`) के आधार पर है।",
+                is_hi,
+            )
+        )
 
     if ext_price > 0:
         diff = round(ext_price - res["bench"])
@@ -153,7 +163,13 @@ def _verify_extracted_quote_in_code(extracted: dict, res: dict, is_rooftop: bool
                 )
             )
     else:
-        flags.append(tr("**Price Check:** Total quote amount was not clearly readable in the photo.", "**कीमत जांच:** फोटो में कुल कीमत स्पष्ट रूप से पढ़ने योग्य नहीं थी।", is_hi))
+        flags.append(
+            tr(
+                "**Price Check:** Total quote amount was not clearly readable in the photo.",
+                "**कीमत जांच:** फोटो में कुल कीमत स्पष्ट रूप से पढ़ने योग्य नहीं थी।",
+                is_hi,
+            )
+        )
 
     if ext_size > 0 and abs(ext_size - expected_size) >= 0.5:
         flags.append(
@@ -189,6 +205,70 @@ def _verify_extracted_quote_in_code(extracted: dict, res: dict, is_rooftop: bool
             )
         )
     return flags
+
+
+def _apply_extracted_quote_to_inputs(ed: dict, is_rooftop: bool):
+    """Populate custom sidebar slots from extracted quote fields."""
+    st.session_state["active_preset"] = "custom"
+    ext_price = int(round(float(ed.get("quoted_total_inr") or 0)))
+    ext_size = float(ed.get("system_size_value") or 0)
+    ext_unit = str(ed.get("system_size_unit") or "").strip().upper()
+
+    if ext_price > 0:
+        st.session_state["quote_in_custom"] = min(5000000, ext_price)
+
+    if ext_size > 0:
+        if is_rooftop or ext_unit == "KW":
+            est_roof = int(round(max(80.0, min(10000.0, ext_size * 100.0)) / 25.0) * 25)
+            st.session_state["roof_in"] = est_roof
+        elif ext_unit == "HP":
+            valid_hps = [3, 5, 7.5, 10]
+            nearest_hp = min(valid_hps, key=lambda h: abs(h - ext_size))
+            st.session_state["hp_in"] = nearest_hp
+
+
+def _render_ocr_audit_card(ed: dict, v_flags: list[str], is_rooftop: bool, is_hi: bool):
+    """Render structured OCR extraction, deterministic Python checks, and optional slot fill action."""
+    price_val = f"₹{int(float(ed.get('quoted_total_inr') or 0)):,}"
+    cap_val = f"{ed.get('system_size_value', 0)} {ed.get('system_size_unit', '')}".strip()
+    panels_val = html.escape(str(ed.get("panel_brand_and_spec", "Not specified")))
+    inv_val = html.escape(str(ed.get("inverter_or_pump_spec", "Not specified")))
+    notes_val = str(ed.get("unreadable_or_missing_notes") or "").strip()
+
+    with st.container(border=True):
+        st.markdown(
+            tr(
+                f"**Extracted by Gemini Vision:** Price `{price_val}` · Capacity `{cap_val}` · "
+                f"Panels: `{panels_val}` · Inverter/Pump: `{inv_val}`",
+                f"**Gemini Vision द्वारा पढ़ा गया:** कीमत `{price_val}` · क्षमता `{cap_val}` · "
+                f"पैनल: `{panels_val}` · इनवर्टर/पंप: `{inv_val}`",
+                is_hi,
+            )
+        )
+        if notes_val and notes_val.lower() not in ("none", "n/a", "not specified"):
+            st.caption(
+                tr(
+                    f"Document note: {notes_val}",
+                    f"दस्तावेज़ नोट: {notes_val}",
+                    is_hi,
+                )
+            )
+        st.markdown(
+            tr(
+                "**Verified by Deterministic Python Engine:**",
+                "**Python नियम इंजन द्वारा सत्यापन:**",
+                is_hi,
+            )
+        )
+        for fl in v_flags:
+            st.markdown(f"- {fl}")
+
+        if st.button(
+            tr("Fill extracted quote & size into sidebar slots", "निकाली गई कीमत और क्षमता को इनपुट में भरें", is_hi),
+            key="apply_ocr_to_slots_btn",
+        ):
+            _apply_extracted_quote_to_inputs(ed, is_rooftop)
+            st.rerun()
 
 
 # ---------------------------------------------------------
@@ -682,39 +762,32 @@ with tab1:
         st.subheader(tr("Quote photo OCR: LLM reads, code verifies", "कोटेशन फोटो OCR: AI पढ़ता है, कोड सत्यापित करता है", is_hi))
         if st.button(tr("Extract & verify uploaded quote photo", "अपलोड किए गए कोटेशन की जांच करें", is_hi), key="ocr_verify_btn"):
             if demo_mode or not api_key:
-                st.info(tr("Connect GEMINI_API_KEY (with Demo mode off) to extract fields from your quote image.", "कोटेशन फोटो पढ़ने के लिए GEMINI_API_KEY जोड़ें और डेमो मोड बंद रखें।", is_hi))
+                st.info(
+                    tr(
+                        "Connect GEMINI_API_KEY (with Demo mode off) to extract fields from your quote image.",
+                        "कोटेशन फोटो पढ़ने के लिए GEMINI_API_KEY जोड़ें और डेमो मोड बंद रखें।",
+                        is_hi,
+                    )
+                )
             else:
                 try:
                     q_part = prepare_image(uploaded_img)
                     ext_data, ext_met = extract_quote_fields(api_key, engine_choice, q_part)
                     st.session_state["extracted_quote_state"] = {"data": ext_data, "metrics": ext_met}
                 except Exception:
-                    st.warning(tr("Could not read structured fields from this image. Try a clearer, well-lit photo.", "इस फोटो से विवरण स्पष्ट रूप से नहीं पढ़ा जा सका। कृपया साफ़ फोटो अपलोड करें।", is_hi))
+                    st.warning(
+                        tr(
+                            "Could not read structured fields from this image. Try a clearer, well-lit photo.",
+                            "इस फोटो से विवरण स्पष्ट रूप से नहीं पढ़ा जा सका। कृपया साफ़ फोटो अपलोड करें।",
+                            is_hi,
+                        )
+                    )
 
         ext_state = st.session_state.get("extracted_quote_state")
         if ext_state:
             ed = ext_state["data"]
             v_flags = _verify_extracted_quote_in_code(ed, res, is_rooftop, is_hi)
-            with st.container():
-                H('<div class="ai-report-box">')
-                st.markdown(
-                    tr(
-                        f"**Extracted by Gemini Vision:** Price `₹{int(ed.get('quoted_total_inr') or 0):,}` · "
-                        f"Capacity `{ed.get('system_size_value', 0)} {ed.get('system_size_unit', '')}` · "
-                        f"Panels: `{html.escape(str(ed.get('panel_brand_and_spec', 'Not specified')))}` · "
-                        f"Inverter/Pump: `{html.escape(str(ed.get('inverter_or_pump_spec', 'Not specified')))}`\n\n"
-                        f"**Verified by Deterministic Python Engine:**",
-                        f"**Gemini Vision द्वारा पढ़ा गया:** कीमत `₹{int(ed.get('quoted_total_inr') or 0):,}` · "
-                        f"क्षमता `{ed.get('system_size_value', 0)} {ed.get('system_size_unit', '')}` · "
-                        f"पैनल: `{html.escape(str(ed.get('panel_brand_and_spec', 'Not specified')))}` · "
-                        f"इनवर्टर/पंप: `{html.escape(str(ed.get('inverter_or_pump_spec', 'Not specified')))}`\n\n"
-                        f"**Python नियम इंजन द्वारा सत्यापन:**",
-                        is_hi,
-                    )
-                )
-                for fl in v_flags:
-                    st.markdown(f"- {fl}")
-                H('</div>')
+            _render_ocr_audit_card(ed, v_flags, is_rooftop, is_hi)
             if ext_state.get("metrics"):
                 _render_eff(ext_state["metrics"])
 
@@ -824,10 +897,8 @@ with tab1:
         elif ai_state["type"] == "warn":
             st.warning(ai_state["msg"])
         elif ai_state["type"] == "ai":
-            with st.container():
-                H('<div class="ai-report-box">')
+            with st.container(border=True):
                 st.markdown(ai_state["text"])
-                H('</div>')
             if ai_state.get("metrics"):
                 _render_eff(ai_state["metrics"])
 
@@ -1027,10 +1098,8 @@ with tab2:
             st.info(f"**{tr('Sample guidance, not an analysis of your photo.', 'नमूना मार्गदर्शन, आपकी फोटो का विश्लेषण नहीं।', is_hi)}**")
         else:
             st.success(f"**{tr('Site survey findings:', 'साइट सर्वेक्षण निष्कर्ष:', is_hi)}**")
-        with st.container():
-            H('<div class="ai-report-box">')
+        with st.container(border=True):
             st.markdown(roof_state["text"])
-            H('</div>')
         if is_rooftop:
             st.caption(
                 tr(
